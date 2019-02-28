@@ -3,7 +3,12 @@ chain_weekly <- function(chr_underlying){
     df_expiration <-
         tibble::tibble(
             #friday = seq(ymd(20131213), ymd(20181221), "weeks")
-            friday = seq(ymd(20140103), ymd(20181228), "weeks")
+            friday = 
+                seq(
+                    lubridate::ymd(20140103)
+                    , lubridate::ymd(20181228)
+                    , "weeks"
+                )
             , underlying = chr_underlying
             , monthly = NA 
             , expiration = as.Date(NA)
@@ -63,6 +68,7 @@ chain_weekly <- function(chr_underlying){
         dplyr::select(
             underlying, monthly, expiration, last_trade_date
             , execution, d2x, num_opts, exec_day_volume
+            , realized_vol, return
         )
     
     

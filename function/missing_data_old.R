@@ -1,10 +1,10 @@
-missing_data <- function(df_opt_px, df_opt_hist, dt_trade, df_spy_upx){
+missing_data <- function(df_opt_px, df_opt_hist, dt_trade, df_upx){
     
     # underlying price <- use stock-quote data and yahoo
     #dbl_underlying_price <- mean(df_opt_px$underlying_price, na.rm = TRUE)
     
     dbl_underlying_price <- 
-        df_spy_upx %>% 
+        df_upx %>% 
         filter(date == dt_trade) %>% 
         .$close %>% `[`(1)
                     

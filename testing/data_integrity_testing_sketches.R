@@ -18,13 +18,21 @@ bizdays.options$set(default.calendar="Rmetrics/NYSE")
 ## reading in data ##
 #####################
 df_chain_desc <- 
-    read_csv("data_output/spy_weekly_2014_2018_chain_desc.csv")
+    read_csv("data_output/spy_weekly_2014_2018_chain_desc_NEW.csv")
 
 df_chain_hist <-
-    read_csv("data_output/spy_weekly_2014_2018_chain_hist.csv")
+    read_csv("data_output/spy_weekly_2014_2018_chain_hist_NEW.csv")
 
 df_opt_hist <- 
-    read_csv("data_output/spy_weekly_2014_2018_opt_hist.csv")
+    read_csv("data_output/spy_weekly_2014_2018_opt_hist_NEW.csv")
+
+df_pnl <- 
+    read_csv("data_output/spy_weekly_2014_2018_pnl_master_NEW.csv")
+
+df_trade <- 
+    read_csv("data_output/spy_weekly_2014_2018_trade_master_NEW.csv")
+
+
 
 
 #####################
@@ -45,7 +53,7 @@ df_underlying_px <-
 
 
 # should be able to get this from FRED use VIXCLS
-df_vol_index <- 
+df_vol_index <-
     tq_get(
         "VIXCLS"
         , get = "economic.data"
@@ -60,6 +68,10 @@ df_vol_index <-
 ##########################################
 ## checking for dates with missing data ##
 ##########################################
+# description: these queries check for days with completely missing
+#              data, it's a crude check, but can catch if things are 
+#              seriously wrong.
+
 # df_chain_hist
 df_td_all %>% 
     left_join(
@@ -68,7 +80,7 @@ df_td_all %>%
     ) %>% 
     filter(is.na(underlying))
 
-# df_opt_hist - will have missing data on 12/5/2018
+# df_opt_hist
 df_td_all %>% 
     left_join(
         df_opt_hist
@@ -82,14 +94,14 @@ df_td_all %>%
 ## check for differences in underlying price ##
 ###############################################
 # there are some fairly big differences, but nothing greater than 
-# 0.01%
+# 0.025% - it really shouldn't make a difference
 df_underlying_px %>% 
     select(date, close) %>% 
     left_join(
         df_opt_hist %>% select(data_date, underlying_price)
         , by = c("date" = "data_date")
     ) %>% 
-    filter(abs((close - underlying_price)/close) > 0.001) %>% 
+    filter(abs((close - underlying_price)/close) > 0.0025) %>% 
     group_by(date) %>% 
     summarize(
         close = mean(close)
@@ -103,18 +115,8 @@ df_underlying_px %>%
 #################################################
 ## checking for missing price data for options ##
 #################################################
-# df_opt_hist %>% 
-#     distinct(underlying_symbol, expiration, strike, type) %>% 
-#     left_join(
-#         df_chain_desc %>% select(expiration, d2x)
-#         , by = "expiration"
-#     ) %>% 
-#     left_join(
-#         df_opt_hist 
-#         , by = ("underling_s")
-#     )
-
-
+# description: each option should have n + 1 rows in df_opt_hist,
+# where n is the d2x on execution date.
 df_opt_hist %>% 
     group_by(
         underlying_symbol, type, expiration, strike
@@ -126,34 +128,9 @@ df_opt_hist %>%
         df_chain_desc %>% select(expiration, d2x)
         , by = "expiration"
     ) %>% 
-    filter(row_count != (d2x + 1)) %>% 
-    View()
+    filter(row_count != (d2x + 1)) 
     
 
-
-# no missing rows here
-df_chain_hist %>% 
-    filter(expiration == ymd(20150402))
-
-# looking at df_opt_hist for a particular option
-df_opt_hist %>% 
-    filter(type == "call") %>% 
-    filter(underlying_symbol == "SPY") %>% 
-    filter(expiration == ymd(20150402)) %>% 
-    filter(strike == 206)
-
-# looks like expiration date is missing for this chain
-df_opt_hist %>% 
-    filter(underlying_symbol == "SPY") %>% 
-    filter(expiration == ymd(20150402)) %>% 
-    filter(data_date == expiration)
-
-
-backtestr::option_chain(
-    trade_date = ymd(20150401)
-    , underlying = "SPY"
-    , expiration = ymd(20150402)
-)
 
 
 ###################################
@@ -247,7 +224,7 @@ df_index_comparison <-
         filter(trade_date == execution) %>% 
         left_join(
             df_vol_index %>%
-                mutate(vol_index = adjusted / 100) %>% 
+                mutate(vol_index = price / 100) %>% 
                 select(date, vol_index)
             , by = c("trade_date" = "date")
         )
@@ -261,3 +238,137 @@ df_index_comparison <-
 
 df_index_comparison %>% 
     filter(abs(vol_diff) > 0.05)
+
+
+
+###########################################################
+## check that dh pnls match up with realized vol premium ##
+###########################################################
+# premium by expiration
+df_prem_exp <- 
+    df_trade %>% 
+        filter(variation == 0.1) %>% 
+        group_by(
+            underlying_symbol
+            , expiration
+        ) %>% 
+        summarize(
+            premium = sum(bid)
+        )
+
+# pnl by expiration
+df_pnl_exp <- 
+    df_pnl %>% 
+        filter(variation == 0.1) %>%
+        group_by(
+            underlying_symbol
+            , expiration
+        ) %>% 
+        summarize(
+            pnl = sum(dly_tot_pnl)
+        )
+
+
+
+
+# premium recieved and dh pnl for each expiration
+df_prem_vs_pnl <- 
+    df_prem_exp %>% 
+        left_join(
+            df_pnl_exp
+            , by = c("underlying_symbol", "expiration")
+        )
+     
+
+# for each expiration, the bid swap rate and the realized vol
+df_vol_prem <- 
+    df_chain_desc %>% 
+        select(underlying, expiration, execution, realized_vol) %>% 
+        left_join(
+            df_chain_hist %>% 
+                select(underlying, expiration, trade_date, bid_swap_rate)
+            , by = c("underlying", "expiration")
+        ) %>%
+        filter(trade_date == execution) %>% 
+        select(underlying, expiration, realized_vol, bid_swap_rate) %>% 
+        mutate(
+            vol_prem = bid_swap_rate - realized_vol
+        )
+
+# a final report that puts together all the numbers that we are
+# interested in
+df_report <- 
+    df_prem_vs_pnl %>% 
+        left_join(
+            df_vol_prem
+            , by = c("underlying_symbol" = "underlying", "expiration")
+        ) %>% 
+        mutate(
+            pnl_ratio = pnl / premium
+        )
+   
+
+# scatter plot of vol-premium vs PNL ratio
+df_report %>% 
+    ggplot() +
+    geom_point(aes(x = vol_prem, y = pnl_ratio))
+
+
+
+
+# directionally correct cases (206 of 260)
+df_report %>% 
+    filter(
+        (vol_prem > 0 & pnl_ratio > 0) |
+        (vol_prem < 0 & pnl_ratio < 0)
+    )
+
+
+# should have been winners but they were losers (20 of 260)
+df_report %>% 
+    filter(vol_prem > 0 & pnl_ratio < 0) %>% 
+    arrange(pnl_ratio)
+
+# should have been losers but they were winners (34 of 260)
+df_report %>% 
+    filter(vol_prem < 0 & pnl_ratio > 0) %>% 
+    arrange(desc(pnl_ratio))
+
+
+df_pnl %>% 
+    filter(variation == 0.1) %>% 
+    filter(expiration == "2018-01-05") %>% 
+    filter(type == "call") %>% 
+    select(underlying_price) %>% 
+    mutate(
+        ret = log(underlying_price) - log(lag(underlying_price))
+    ) %>% 
+    .$ret %>% sd(na.rm = TRUE) * sqrt(252)
+    
+##############
+## OLD CODE ##
+##############
+# # no missing rows here
+# df_chain_hist %>% 
+#     filter(expiration == ymd(20150402))
+# 
+# # looking at df_opt_hist for a particular option
+# df_opt_hist %>% 
+#     filter(type == "call") %>% 
+#     filter(underlying_symbol == "SPY") %>% 
+#     filter(expiration == ymd(20150402)) %>% 
+#     filter(strike == 206)
+# 
+# # looks like expiration date is missing for this chain
+# df_opt_hist %>% 
+#     filter(underlying_symbol == "SPY") %>% 
+#     filter(expiration == ymd(20150402)) %>% 
+#     filter(data_date == expiration)
+# 
+# 
+# backtestr::option_chain(
+#     trade_date = ymd(20150401)
+#     , underlying = "SPY"
+#     , expiration = ymd(20150402)
+# )
+

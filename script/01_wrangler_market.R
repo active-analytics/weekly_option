@@ -20,6 +20,12 @@ load_rmetrics_calendars(2000:2020)
 bizdays.options$set(default.calendar="Rmetrics/NYSE")
 
 
+# temp for testing
+df_num_opt <-
+    read_csv("data_output/weekly_etf_with_index_num_opt.csv")
+    
+
+
 # setting underlying
 underlying <- "SPY" # don't call this chr_underlying
 
@@ -40,7 +46,8 @@ lst_chain_hist <- list()
 lst_opt_hist <- list()
 
 # looping through all chains
-for (ix_chn in 65:nrow(df_chain)){
+for (ix_chn in 1:nrow(df_chain)){
+#for (ix_chn in 74:74){    
     
     
     # grabbing the execution and expriation
@@ -77,9 +84,9 @@ for (ix_chn in 65:nrow(df_chain)){
     
     
     
-    #-------------------------------------------#
-    # calculating realized volatility during ch #
-    #-------------------------------------------#
+    #---------------------------------------------------#
+    # calculating realized volatility during expiration #
+    #---------------------------------------------------#
     dbl_realized_vol <- 
         df_upx %>% 
             filter(date >= dt_execution) %>%  
@@ -143,6 +150,8 @@ for (ix_chn in 65:nrow(df_chain)){
     dt_post_exec_td <- 
         bizseq(add.bizdays(dt_execution, 1), dt_expiration)
     
+    
+    df_prev_opt_hist <- df_otm
     #loop through the trading days and grab
     #the price history for all the options in df_otm
     for (ix_td in 1:(length(dt_post_exec_td))){
@@ -165,28 +174,58 @@ for (ix_chn in 65:nrow(df_chain)){
                , exclude_zero_bid = FALSE
            )
         
-        # calculating the implied forward price
+        
+        # testing
+        # if (dt_trade == lubridate::ymd(20150604)){
+        #     browser()
+        # }
+        
+        #---------------------------------------#
+        # calculating the implied forward price #
+        #---------------------------------------#
         if(dt_trade == dt_last_trade){
-            dbl_implied_forward <- 
-                #mean(df_opt_px_all$underlying_price[1], rm.na = TRUE)
-                # using yahoo close prices
-                df_upx %>% 
-                    filter(date == dt_trade) %>% 
-                    .$close %>% `[`(1)
+            # dbl_implied_forward <- 
+            #     df_upx %>% 
+            #         filter(date == dt_trade) %>% 
+            #         .$close %>% `[`(1)
+            
+            df_curr_upx <-
+                df_upx %>% filter(date == dt_trade)
+            if(nrow(df_curr_upx) == 1){
+                dbl_implied_forward <- df_curr_upx$close[1]    
+            } else {
+                df_prev_upx <-
+                    df_upx %>% filter(date == bizdays::add.bizdays(dt_trade, -1))
+                dbl_implied_forward <- df_prev_upx$close[1]
+            }
+            
         } else {
-            if (nrow(df_opt_px_all) > 0) {
+            # this is not a very robust condition, but I'll use it
+            # for now, ultimately need to make the implied forward
+            # function more robust
+            if (nrow(df_opt_px_all) >= nrow(df_otm)) {
                 dbl_implied_forward <- implied_forward(df_opt_px_all)    
             } else {
-                dbl_implied_forward <-
-                    df_upx %>% 
-                    filter(date == dt_trade) %>% 
-                    .$close %>% `[`(1)
+                # dbl_implied_forward <-
+                #     df_upx %>% 
+                #     filter(date == dt_trade) %>% 
+                #     .$close %>% `[`(1)
+                
+                df_curr_upx <-
+                    df_upx %>% filter(date == dt_trade)
+                if(nrow(df_curr_upx) == 1){
+                    dbl_implied_forward <- df_curr_upx$close[1]    
+                } else {
+                    df_prev_upx <-
+                        df_upx %>% filter(date == bizdays::add.bizdays(dt_trade, -1))
+                    dbl_implied_forward <- df_prev_upx$close[1]
+                }
             }
                 
         }
         
         
-        if (nrow(df_opt_px_all) > 0) {
+        if (nrow(df_opt_px_all) >= nrow(df_otm)) {
             # all otm options relative to implied foward
             df_curr_otm_all <- otm_all(df_opt_px_all, dbl_implied_forward)
             # removing low information options
@@ -199,7 +238,7 @@ for (ix_chn in 65:nrow(df_chain)){
         if(dt_trade == dt_last_trade){
             dbl_swap_rate <- c(0, 0, 0)
         } else {
-            if (nrow(df_opt_px_all) > 0){
+            if (nrow(df_opt_px_all) >= nrow(df_otm)){
                 dbl_swap_rate <- swap_rate(df_curr_otm, int_d2x)  
             } else {
                 dbl_swap_rate <- c(NA_real_, NA_real_, NA_real_)
@@ -235,15 +274,24 @@ for (ix_chn in 65:nrow(df_chain)){
         
         # filling in some missing data in case of empty prices
         df_opt_px <- 
-            missing_data(df_opt_px_all, df_opt_px, dt_trade, df_upx)
+            missing_data(
+                 df_opt_px
+                , dt_trade
+                , int_d2x
+                , df_upx
+                , df_prev_opt_hist)
+        
+        
+        
+        
         
         # recalculating greeks
         if(dt_trade == dt_last_trade){
             df_opt_px <- greeks_exp(df_opt_px)
         } else {
-            if (nrow(df_opt_px_all) > 0){
+            #if (nrow(df_opt_px_all) > 0){
                 df_opt_px <- greeks(df_opt_px, int_d2x, dbl_implied_forward)    
-            }
+            #}
                 
         }
         
@@ -252,9 +300,11 @@ for (ix_chn in 65:nrow(df_chain)){
         #----------------------#
         # update if it's either the final trading
         # or if there is actually price data 
-        if ((nrow(df_opt_px_all) > 0) | (dt_trade == dt_last_trade)){
+        #if ((nrow(df_opt_px_all) > 0) | (dt_trade == dt_last_trade)){
             lst_opt_hist[[length(lst_opt_hist) + 1]] <- df_opt_px
-        }
+        #}
+        
+        df_prev_opt_hist <- df_opt_px
         
     }
     
@@ -269,9 +319,9 @@ df_opt_hist <- bind_rows(lst_opt_hist)
 #-------------------#
 # writing csv files #
 #-------------------#
-# write_csv(df_chain, "spy_weekly_2014_2018_chain_desc.csv")
-# write_csv(df_chain_hist, "spy_weekly_2014_2018_chain_hist.csv")
-# write_csv(df_opt_hist, "spy_weekly_2014_2018_opt_hist.csv")
+write_csv(df_chain, "spy_weekly_2014_2018_chain_desc_NEW.csv")
+write_csv(df_chain_hist, "spy_weekly_2014_2018_chain_hist_NEW.csv")
+write_csv(df_opt_hist, "spy_weekly_2014_2018_opt_hist_NEW.csv")
 
 
 
