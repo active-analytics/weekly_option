@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1551312029346.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "B94CFC8A",
+    "lastKnownWriteTime" : 1551315845,
+    "last_content_update" : 1551315845455,
+    "path" : "~/files/ods/weekly_option/script/01_wrangler_market.R",
+    "project_path" : "script/01_wrangler_market.R",
+    "properties" : {
+        "cursorPosition" : "253,44",
+        "scrollLine" : "242",
+        "source_window_id" : ""
+    },
+    "relative_order" : 5,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

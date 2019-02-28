@@ -1,0 +1,20 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1551312656819.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2289256495",
+    "id" : "B0B132D6",
+    "lastKnownWriteTime" : 1549468563,
+    "last_content_update" : 1549468563,
+    "path" : "~/files/ods/weekly_option/function/missing_data.R",
+    "project_path" : "function/missing_data.R",
+    "properties" : {
+    },
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
