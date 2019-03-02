@@ -1,6 +1,6 @@
 ---
 title: "Weekly Option Data Integrity Test"
-subtitle: "IWM: 2014-2018"
+subtitle: "2014-2018"
 author: "Pritam Dalal"
 output: 
   html_document:
@@ -20,8 +20,6 @@ editor_options:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
     echo = TRUE
-    #, comment = "#>"
-    #, collapse = TRUE
 )
 
 options(width = 100)
@@ -41,28 +39,59 @@ library(bizdays)
 # initializing bizdays libraries
 load_rmetrics_calendars(2000:2020)
 bizdays.options$set(default.calendar="Rmetrics/NYSE")
+
+source("function/vol_index.R")
 ```
+
+
+
+```{r, setting_underlying, include=FALSE}
+
+chr_underlying <- "EEM"
+
+```
+
 
 
 ```{r, reading_data, include=FALSE, cache=TRUE}
 #####################
 ## reading in data ##
 #####################
-df_chain_desc <- 
-    read_csv("data_output/iwm_weekly_2014_2018_chain_desc.csv")
+chr_path <- 
+    paste0(
+        "data_output/", str_to_lower(chr_underlying)
+        , "_weekly_2014_2018_chain_desc.csv"
+    )
+df_chain_desc <- read_csv(chr_path)
 
-df_chain_hist <-
-    read_csv("data_output/iwm_weekly_2014_2018_chain_hist.csv")
 
-df_opt_hist <- 
-    read_csv("data_output/iwm_weekly_2014_2018_opt_hist.csv")
+chr_path <- 
+    paste0(
+        "data_output/", str_to_lower(chr_underlying)
+        , "_weekly_2014_2018_chain_hist.csv"
+    )
+df_chain_hist <-read_csv(chr_path)
 
-df_pnl <- 
-    read_csv("data_output/iwm_weekly_2014_2018_pnl_master.csv")
+chr_path <- 
+    paste0(
+        "data_output/", str_to_lower(chr_underlying)
+        , "_weekly_2014_2018_opt_hist.csv"
+    )
+df_opt_hist <- read_csv(chr_path)
 
-df_trade <- 
-    read_csv("data_output/iwm_weekly_2014_2018_trade_master.csv")
+chr_path <- 
+    paste0(
+        "data_output/", str_to_lower(chr_underlying)
+        , "_weekly_2014_2018_pnl_master.csv"
+    )
+df_pnl <- read_csv(chr_path)
 
+chr_path <- 
+    paste0(
+        "data_output/", str_to_lower(chr_underlying)
+        , "_weekly_2014_2018_trade_master.csv"
+    )
+df_trade <- read_csv(chr_path)
 ```
 
 
@@ -84,7 +113,7 @@ df_td_all <-
 ## grabbing price data from yahoo with tidyquant ##
 ###################################################
 df_underlying_px <- 
-    tq_get("IWM", from = "2014-01-03", to = "2018-12-29")
+    tq_get(chr_underlying, from = "2014-01-03", to = "2018-12-29")
 
 ########################################################
 ## grabbing volatility index from FRED with tidyquant ##
@@ -98,12 +127,18 @@ df_underlying_px <-
 #     )
 
 df_vol_index <- 
-    read_csv("data_input/rvxdailyprices.csv")
+    vol_index(chr_underlying) %>% 
+    read_csv()
 
 df_vol_index$Date <- mdy(df_vol_index$Date)
 ```
 
 <br>
+
+
+## Report for: `r chr_underlying`
+
+
 
 ### Dates with Missing Data
 These queries perform a crude check: *Are there any trade dates with completely missing data?*  

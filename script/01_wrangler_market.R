@@ -27,7 +27,7 @@ df_num_opt <-
 
 
 # setting underlying
-underlying <- "TLT" # don't call this chr_underlying
+underlying <- "FXY" # don't call this chr_underlying
 
 # creating df_chain
 df_chain <- chain_weekly(underlying)
@@ -319,9 +319,9 @@ df_opt_hist <- bind_rows(lst_opt_hist)
 #-------------------#
 # writing csv files #
 #-------------------#
-write_csv(df_chain, "tlt_weekly_2014_2018_chain_desc.csv")
-write_csv(df_chain_hist, "tlt_weekly_2014_2018_chain_hist.csv")
-write_csv(df_opt_hist, "tlt_weekly_2014_2018_opt_hist.csv")
+write_csv(df_chain,      "fxy_weekly_2014_2018_chain_desc.csv")
+write_csv(df_chain_hist, "fxy_weekly_2014_2018_chain_hist.csv")
+write_csv(df_opt_hist,   "fxy_weekly_2014_2018_opt_hist.csv")
 
 
 
