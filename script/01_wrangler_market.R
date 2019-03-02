@@ -27,7 +27,7 @@ df_num_opt <-
 
 
 # setting underlying
-underlying <- "SPY" # don't call this chr_underlying
+underlying <- "TLT" # don't call this chr_underlying
 
 # creating df_chain
 df_chain <- chain_weekly(underlying)
@@ -91,8 +91,8 @@ for (ix_chn in 1:nrow(df_chain)){
         df_upx %>% 
             filter(date >= dt_execution) %>%  
             filter(date <= dt_expiration) %>% 
-            mutate(return = log(adjusted) - log(lag(adjusted))) %>% 
-            .$return %>% 
+            mutate(ret = log(adjusted) - log(lag(adjusted))) %>% 
+            .$ret %>% 
             sd(na.rm = TRUE) * sqrt(252)
     
     
@@ -100,8 +100,8 @@ for (ix_chn in 1:nrow(df_chain)){
         df_upx %>% 
         filter(date >= dt_execution) %>%  
         filter(date <= dt_expiration) %>% 
-        mutate(return = log(adjusted) - log(lag(adjusted))) %>% 
-        .$return %>% sum(na.rm = TRUE)
+        mutate(ret = log(adjusted) - log(lag(adjusted))) %>% 
+        .$ret %>% sum(na.rm = TRUE)
     
     
     #-------------------#
@@ -116,7 +116,7 @@ for (ix_chn in 1:nrow(df_chain)){
     # recording realized volatility
     df_chain$realized_vol[ix_chn] <- dbl_realized_vol
     # recording return
-    df_chain$return[ix_chn] <- dbl_return
+    df_chain$ret[ix_chn] <- dbl_return
     
     
     
@@ -319,9 +319,9 @@ df_opt_hist <- bind_rows(lst_opt_hist)
 #-------------------#
 # writing csv files #
 #-------------------#
-write_csv(df_chain, "spy_weekly_2014_2018_chain_desc_NEW.csv")
-write_csv(df_chain_hist, "spy_weekly_2014_2018_chain_hist_NEW.csv")
-write_csv(df_opt_hist, "spy_weekly_2014_2018_opt_hist_NEW.csv")
+write_csv(df_chain, "tlt_weekly_2014_2018_chain_desc.csv")
+write_csv(df_chain_hist, "tlt_weekly_2014_2018_chain_hist.csv")
+write_csv(df_opt_hist, "tlt_weekly_2014_2018_opt_hist.csv")
 
 
 

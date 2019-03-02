@@ -22,7 +22,7 @@ library(tictoc)
 ############################
 ## setting the underlying ##
 ############################
-df_underlying  <- tibble(underlying = c("SPY"))
+df_underlying  <- tibble(underlying = c("TLT"))
 
 
 #####################
@@ -30,19 +30,19 @@ df_underlying  <- tibble(underlying = c("SPY"))
 #####################
 df_chain <- 
     read_csv(
-        "data_output/spy_weekly_2014_2018_chain_desc_NEW.csv"
+        "data_output/tlt_weekly_2014_2018_chain_desc.csv"
         , col_types = cols()
     )
 
 df_chain_hist <- 
     read_csv(
-        "data_output/spy_weekly_2014_2018_chain_hist_NEW.csv"
+        "data_output/tlt_weekly_2014_2018_chain_hist.csv"
         , col_types = cols()
     )
 
 df_opt_hist <-
     read_csv(
-        "data_output/spy_weekly_2014_2018_opt_hist_NEW.csv"
+        "data_output/tlt_weekly_2014_2018_opt_hist.csv"
         , col_types = cols()
     )
 
@@ -192,8 +192,8 @@ df_pnl <-
 ##########################
 ## writing files to CSV ##
 ##########################
-# write_csv(df_pnl, "spy_weekly_2014_2018_pnl_master_NEW.csv")
-# write_csv(df_trade, "spy_weekly_2014_2018_trade_master_NEW.csv")
+write_csv(df_pnl, "tlt_weekly_2014_2018_pnl_master.csv")
+write_csv(df_trade, "tlt_weekly_2014_2018_trade_master.csv")
 
 
 

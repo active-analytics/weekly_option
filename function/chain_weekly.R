@@ -17,7 +17,7 @@ chain_weekly <- function(chr_underlying){
             , num_opts = NA_integer_
             , exec_day_volume = NA_integer_
             , realized_vol = NA_real_
-            , return = NA_real_
+            , ret = NA_real_
         )
     
     for (ix in 1:nrow(df_expiration)){
@@ -68,7 +68,7 @@ chain_weekly <- function(chr_underlying){
         dplyr::select(
             underlying, monthly, expiration, last_trade_date
             , execution, d2x, num_opts, exec_day_volume
-            , realized_vol, return
+            , realized_vol, ret
         )
     
     
