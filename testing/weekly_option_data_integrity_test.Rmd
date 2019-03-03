@@ -26,7 +26,7 @@ options(width = 100)
 ```
 
 
-```{r, loading_packages, include=FALSE, cache=TRUE}
+```{r, loading_packages, include=FALSE}
 ######################
 ## loading packages ##
 ######################
@@ -34,8 +34,9 @@ library(tidyverse)
 library(lubridate)
 library(tidyquant)
 library(bizdays)
+```
 
-
+```{r, more_packages, include=FALSE, cache=TRUE}
 # initializing bizdays libraries
 load_rmetrics_calendars(2000:2020)
 bizdays.options$set(default.calendar="Rmetrics/NYSE")
@@ -44,10 +45,9 @@ source("function/vol_index.R")
 ```
 
 
-
 ```{r, setting_underlying, include=FALSE}
 
-chr_underlying <- "EEM"
+chr_underlying <- "GDX"
 
 ```
 
@@ -57,6 +57,7 @@ chr_underlying <- "EEM"
 #####################
 ## reading in data ##
 #####################
+# chain description
 chr_path <- 
     paste0(
         "data_output/", str_to_lower(chr_underlying)
@@ -64,7 +65,7 @@ chr_path <-
     )
 df_chain_desc <- read_csv(chr_path)
 
-
+# chain history
 chr_path <- 
     paste0(
         "data_output/", str_to_lower(chr_underlying)
@@ -72,6 +73,7 @@ chr_path <-
     )
 df_chain_hist <-read_csv(chr_path)
 
+# option history
 chr_path <- 
     paste0(
         "data_output/", str_to_lower(chr_underlying)
@@ -79,6 +81,7 @@ chr_path <-
     )
 df_opt_hist <- read_csv(chr_path)
 
+# pnl master
 chr_path <- 
     paste0(
         "data_output/", str_to_lower(chr_underlying)
@@ -86,12 +89,22 @@ chr_path <-
     )
 df_pnl <- read_csv(chr_path)
 
+# trade master
 chr_path <- 
     paste0(
         "data_output/", str_to_lower(chr_underlying)
         , "_weekly_2014_2018_trade_master.csv"
     )
 df_trade <- read_csv(chr_path)
+
+
+# SPY pnl master
+df_spy_pnl <-
+    read_csv("data_output/spy_weekly_2014_2018_pnl_master.csv")
+
+# SPY trade master
+df_spy_trade <- 
+    read_csv("data_output/spy_weekly_2014_2018_trade_master.csv")
 ```
 
 
@@ -131,12 +144,159 @@ df_vol_index <-
     read_csv()
 
 df_vol_index$Date <- mdy(df_vol_index$Date)
+df_vol_index$Close <- as.numeric(df_vol_index$Close)
+
+df_vol_index <-
+    df_vol_index %>% filter(!is.na(Close))
 ```
 
 <br>
 
 
-## Report for: `r chr_underlying`
+# Underlying: `r chr_underlying`
+
+<br>
+<br>
+
+
+### Performance Analysis
+```{r, performance_analysis, include=FALSE}
+# SPY delta-hedged
+df_spy_dh <-
+    df_spy_pnl %>% 
+        group_by(variation, data_date) %>% 
+        summarize(pnl = sum(dly_tot_pnl)) %>% 
+        mutate(
+            ttd_pnl = cumsum(pnl)
+            , underlying = "SPY"
+            , hedging = "delta_hedge"
+        )
+
+# SPY naked
+df_spy_naked <-
+    df_spy_pnl %>% 
+        group_by(variation, data_date) %>% 
+        summarize(pnl = sum(dly_opt_pnl)) %>% 
+        mutate(
+            ttd_pnl = cumsum(pnl)
+            , underlying = "SPY"
+            , hedging = "naked"
+        )
+
+
+
+# SPY delta-hedged
+df_daily_dh <-
+    df_pnl %>% 
+        group_by(variation, data_date) %>% 
+        summarize(pnl = sum(dly_tot_pnl)) %>% 
+        mutate(
+            ttd_pnl = cumsum(pnl)
+            , underlying = chr_underlying
+            , hedging = "delta_hedge"
+        )
+
+# SPY naked
+df_daily_naked <-
+    df_pnl %>% 
+        group_by(variation, data_date) %>% 
+        summarize(pnl = sum(dly_opt_pnl)) %>% 
+        mutate(
+            ttd_pnl = cumsum(pnl)
+            , underlying = chr_underlying
+            , hedging = "naked"
+        )
+
+# all daily pnls together
+df_daily_pnl <-
+    bind_rows(df_spy_dh, df_spy_naked, df_daily_dh, df_daily_naked)
+
+
+# SPY premium
+df_spy_premium <-
+    df_spy_trade %>% 
+        group_by(variation) %>% 
+        summarize(premium = sum(bid)) %>% 
+        mutate(underlying = "SPY")
+
+
+# Report underlying premium
+df_premium <- 
+    df_trade %>% 
+        group_by(variation) %>% 
+        summarize(premium = sum(bid)) %>% 
+        mutate(underlying = chr_underlying)
+
+
+df_premium_all <- 
+    bind_rows(df_spy_premium, df_premium)
+    
+```
+
+
+```{r, basic_performace, echo=FALSE, cache=TRUE}
+df_performance <- 
+    df_daily_pnl %>% 
+        group_by(underlying, variation, hedging) %>% 
+        summarize(
+            total_pnl = sum(pnl)
+            , sharpe = (mean(pnl) / sd(pnl)) * sqrt(252)
+        ) %>% 
+        left_join(
+            df_premium_all
+            , by = c("underlying", "variation")
+        ) %>% 
+        mutate(
+            prem_ret = total_pnl / premium
+        )
+
+df_performance %>%
+    arrange(underlying, hedging, variation) %>%
+    mutate(
+        total_pnl = round(total_pnl, 0)
+        , sharpe = round(sharpe, 2)
+        , prem_ret = round(prem_ret, 2)
+    )
+```
+
+<br>
+
+
+```{r, graphing_performance, echo=FALSE, cache=TRUE}
+df_performance %>%
+    ggplot(aes(x = factor(variation), y = prem_ret, fill = underlying)) +
+    geom_bar(stat = "identity", position="dodge") +
+    #geom_text(aes(label=round(prem_ret, 2), vjust=-0.25)) +
+    facet_wrap(~hedging, nrow=2) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    labs(
+        title = "Premium Retained"
+        , x = "delta"
+        , y = "premium retained"
+    )
+
+
+df_performance %>%
+    ggplot(aes(x = factor(variation), y = sharpe, fill = underlying)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    #geom_text(aes(label=round(sharpe, 2), vjust=-0.25)) +
+    facet_wrap(~hedging, nrow=2) +
+    labs(title = "Sharpe Ratio")
+
+
+df_daily_pnl %>% 
+    ggplot(aes(x = data_date, y = ttd_pnl, color = underlying)) +  
+    geom_line() +
+    facet_grid(hedging ~ variation) +
+    labs(title = "TTD PNL")
+```
+
+<br>
+<br>
+
+
+
+
 
 
 
@@ -144,7 +304,7 @@ df_vol_index$Date <- mdy(df_vol_index$Date)
 These queries perform a crude check: *Are there any trade dates with completely missing data?*  
 
 
-If either of them return rows, it could mean that there is something seriously wrong in the wrangling process.
+If either of them returns rows, it could mean that there is something seriously wrong in the wrangling process.
 
 
 #### **`df_chain_hist`**
@@ -174,6 +334,14 @@ df_td_all %>%
 ```
 
 <br>
+<br>
+
+
+
+
+
+
+
 
 ### Underlying Price Differences
 One of the major drivers of PNL in my backtests is the underlying prices.  In particular, I used them directly to calculate the final payoff of the options.  I check the `underlying_price` values in the Delta-Neutral data set against Yahoo prices by using the `tidyquant` package. 
@@ -201,6 +369,12 @@ df_underlying_px %>%
 
 
 <br>
+<br>
+
+
+
+
+
 
 ### Missing Option Histories
 Each unique option should have `n + 1` rows in `df_opt_hist` where `n` is the `d2x` of the option on execution date.  (Note: the reworking of the `missing_data()` function that I did on 2/28/2019 is what makes this hold in a strong way.)
@@ -220,6 +394,9 @@ df_opt_hist %>%
 ```
 
 <br>
+<br>
+
+
 
 ### Basic Checks on `df_chain_desc`
 These are some basic checks on `df_chain_desc` that check for major problems with the wrangling process.  They also check that the underlying is tradeable for each expriation.
@@ -240,15 +417,20 @@ df_chain_desc %>%
 ```
 
 <br>
+<br>
+
+
+
 
 ### Implied Volatilities vs Lagged Realized
 There are two major components of expiration level PNL, the option prices on expiration date, the deltas (which I have no real cause for concern over), and the underlying prices used to calculate the delta-hedging.
 
 In this section we investigate the implied volatilities as a way of checking if there are any majore issues with the price data.
 
+<br>
 
 ##### Graphing Implied vs Realized
-It is useful to plot `bid_swap_rate` and `realized_vol` over time to ensure that they move together.  However, it's hard to garner specific results from this.
+It is useful to plot `bid_swap_rate` and `realized_vol` over time to ensure that they move together.  However, it's hard to garner specific conclusions from this.
 
 
 ```{r, graphing_bid_ivs, cache=TRUE}
@@ -351,6 +533,9 @@ df_real_iv_comparison %>%
 ```
 
 <br>
+<br>
+
+
 
 ### Implied Volatility vs CBOE Volatility Index
 In the previous section we compared implieds to realized.  Now we are comparing our implied to a volatility index.  The CBOE publishes a variety of volatility indexes that will be useful to us.
@@ -381,7 +566,6 @@ df_index_comparison <-
 df_index_comparison <-
     df_index_comparison %>%
         mutate(vol_diff = bid_swap_rate - vol_index)
-
 ```
 
 
@@ -391,11 +575,15 @@ df_index_comparison <-
 #################################
 # (1) difference between vol-index and bid_swap_rate > 0.05
 df_index_comparison %>%
-    filter(abs(vol_diff) > 0.05)
+    filter(abs(vol_diff) > 0.05) %>% 
+    arrange(vol_diff)
 ```
 
 
 <br>
+<br>
+
+
 
 ### Delta-Hedge PNLs vs Realized Volatility Premium
 
@@ -507,7 +695,7 @@ dbl_percentage <-
 print(paste0("Directionaly Correct Percentage: ", round(dbl_percentage, 2)))
 ```
 
-
+<br>
 
 #### Should Be Winners
 Let's see how many should have been winners but actually turned out to be losers.
@@ -523,7 +711,7 @@ df_report %>%
 
 We explore the most egregious case and make sure the that we agree with the numbers.
 
-```{r, worst_should_be_winner_date, cache=TRUE, inclue=FALSE, echo=FALSE}
+```{r, worst_should_be_winner_date, cache=TRUE, include=FALSE, echo=FALSE}
 dt_worst_should_be_winner <- 
     df_report %>%
         filter(vol_prem > 0 & pnl_ratio < 0) %>%
@@ -533,19 +721,20 @@ dt_worst_should_be_winner <-
 ```
 
 
-```{r, worst_should_be_winner_pnl, cache=TRUE, echo=FALSE}
-df_pnl %>%
-    filter(variation == 0.1) %>%
-    filter(expiration == dt_worst_should_be_winner) %>% 
-    select(
-        underlying = underlying_symbol, expiration, data_date
-        , type, strike, bid, ask, upx = underlying_price
-        , delta, dly_opt_pnl, dly_dh_pnl, dly_tot_pnl  
-    )
-```
+<!-- ```{r, worst_should_be_winner_pnl, cache=TRUE, echo=FALSE} -->
+<!-- df_pnl %>% -->
+<!--     filter(variation == 0.1) %>% -->
+<!--     filter(expiration == dt_worst_should_be_winner) %>%  -->
+<!--     select( -->
+<!--         underlying = underlying_symbol, expiration, data_date -->
+<!--         , type, strike, bid, ask, upx = underlying_price -->
+<!--         , delta, dly_opt_pnl, dly_dh_pnl, dly_tot_pnl   -->
+<!--     ) -->
+<!-- ``` -->
 
 
-```{r, worst_should_be_winner_realized_vol, cache=TRUE}
+
+```{r, worst_should_be_winner_realized_vol, echo=FALSE, cache=TRUE}
 # looking at one particular case and confirming that I
 # agree with the numbers
 df_pnl %>%
@@ -559,12 +748,13 @@ df_pnl %>%
     .$ret %>% sd(na.rm = TRUE) * sqrt(252)
 ```
 
+
+<br>
+
 #### Should Be Losers
 
-
-
 ```{r, should_be_losers, cache=TRUE}
-# should have been losers but they were winners (34 of 260)
+# should have been losers but they were winners
 df_report %>%
     filter(vol_prem < 0 & pnl_ratio > 0) %>%
     arrange(desc(pnl_ratio))
@@ -576,25 +766,37 @@ df_report %>%
 dt_worst_should_be_loser <- 
     df_report %>%
         filter(vol_prem < 0 & pnl_ratio > 0) %>%
-        top_n(-1, pnl_ratio) %>% 
+        top_n(1, pnl_ratio) %>% 
         .$expiration %>% 
         `[`(1)
 ```
 
 We explore the most egregious case and make sure the that we agree with the numbers.
 
-```{r, worst_should_be_loser_pnl, cache=TRUE, echo=FALSE}
+<!-- ```{r, worst_should_be_loser_pnl, cache=TRUE, echo=FALSE} -->
+<!-- df_pnl %>% -->
+<!--     filter(variation == 0.1) %>% -->
+<!--     filter(expiration == dt_worst_should_be_loser) %>%  -->
+<!--     select( -->
+<!--         underlying = underlying_symbol, expiration, data_date -->
+<!--         , type, strike, bid, ask, upx = underlying_price -->
+<!--         , delta, dly_opt_pnl, dly_dh_pnl, dly_tot_pnl   -->
+<!--     ) -->
+<!-- ``` -->
+
+```{r, worst_should_be_loser_realized_vol, cache=TRUE, echo=FALSE}
+# looking at one particular case and confirming that I
+# agree with the numbers
 df_pnl %>%
     filter(variation == 0.1) %>%
-    filter(expiration == dt_worst_should_be_winner) %>% 
-    select(
-        underlying = underlying_symbol, expiration, data_date
-        , type, strike, bid, ask, upx = underlying_price
-        , delta, dly_opt_pnl, dly_dh_pnl, dly_tot_pnl  
-    )
+    filter(expiration == dt_worst_should_be_loser) %>%
+    filter(type == "call") %>%
+    select(underlying_price) %>%
+    mutate(
+        ret = log(underlying_price) - log(lag(underlying_price))
+    ) %>%
+    .$ret %>% sd(na.rm = TRUE) * sqrt(252)
 ```
-
-
 
 
 
