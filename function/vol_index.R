@@ -61,7 +61,7 @@ vol_index <- function(underlying){
     }
     
     
-    if (underlying == "TLT"){
+    if (underlying == "IEF"){
         return("data_input/tyvixdailyprices.csv")
     }
     
@@ -72,7 +72,7 @@ vol_index <- function(underlying){
     
     
     if (underlying == "XLE"){
-        return("data_input/ovxhistory.csv")
+        return("data_input/vxxledailyprices.csv")
     }
     
 }

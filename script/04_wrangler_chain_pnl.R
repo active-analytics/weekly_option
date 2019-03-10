@@ -17,10 +17,10 @@ library(tictoc)
 ## reading-in data ##
 #####################
 df_chain_desc <- 
-    read_csv("data_output/dia_weekly_2014_2018_chain_desc.csv")
+    read_csv("data_output/monthly/dia_monthly_2014_2018_chain_desc.csv")
 
 df_scaled_pnl <- 
-    read_csv("data_output/dia_weekly_2014_2018_pnl_scaled.csv")
+    read_csv("data_output/monthly/dia_monthly_2014_2018_pnl_scaled.csv")
 
 
 # create the dataframe consisting of all strategy, variation, expiration
@@ -97,4 +97,4 @@ df_chain_pnl <- bind_rows(lst_chain_pnl)
 #######################
 ## writing csv files ##
 #######################
-#write_csv(df_chain_pnl, "dia_weekly_2014_2018_chain_pnl.csv")
+write_csv(df_chain_pnl, "dia_monthly_2014_2018_chain_pnl.csv")

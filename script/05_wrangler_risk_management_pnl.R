@@ -9,7 +9,7 @@ library(tictoc)
 ## reading in data ##
 #####################
 df_chain_pnl_all <- 
-    read_csv("data_output/dia_weekly_2014_2018_chain_pnl.csv")
+    read_csv("data_output/monthly/spy_monthly_2014_2018_chain_pnl.csv")
 
 
 
@@ -38,8 +38,8 @@ lst_managed_pnl <- list()
 
 df_management_level <-
     crossing(
-          dh_threshold = 0.10
-        , loss_trigger = 3.00
+          dh_threshold = c(0, 1)
+        , loss_trigger = seq(0.25, 3.00, 0.25)
     )
 
 
@@ -185,7 +185,7 @@ print(paste0("Start time: ", dt_start))
 print(paste0("End time: ", dt_end))
 
 # write data to csv
-#write_csv(df_managed_pnl, "dia_weekly_2014_2018_managed_pnl_010_300.csv")
+write_csv(df_managed_pnl, "spy_monthly_2014_2018_managed_pnl.csv")
 
 
 

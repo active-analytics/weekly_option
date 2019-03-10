@@ -20,18 +20,13 @@ load_rmetrics_calendars(2000:2020)
 bizdays.options$set(default.calendar="Rmetrics/NYSE")
 
 
-# temp for testing
-df_num_opt <-
-    read_csv("data_output/weekly_etf_with_index_num_opt.csv")
-    
-
 
 # setting underlying
-underlying <- "FXY" # don't call this chr_underlying
+underlying <- "GLD" # don't call this variable chr_underlying
 
 # creating df_chain
-df_chain <- chain_weekly(underlying)
-#df_chain <- chain_monthly(underlying)
+#df_chain <- chain_weekly(underlying)
+df_chain <- chain_monthly(underlying)
 
 
 # grab all close prices from Yahoo using tq_get()
@@ -40,14 +35,11 @@ df_upx <-
 
 
 tic()
-#df_chain_hist = tibble()
-#df_opt_hist = tibble()
 lst_chain_hist <- list()
 lst_opt_hist <- list()
 
 # looping through all chains
 for (ix_chn in 1:nrow(df_chain)){
-#for (ix_chn in 74:74){    
     
     
     # grabbing the execution and expriation
@@ -174,11 +166,7 @@ for (ix_chn in 1:nrow(df_chain)){
                , exclude_zero_bid = FALSE
            )
         
-        
-        # testing
-        # if (dt_trade == lubridate::ymd(20150604)){
-        #     browser()
-        # }
+
         
         #---------------------------------------#
         # calculating the implied forward price #
@@ -319,9 +307,9 @@ df_opt_hist <- bind_rows(lst_opt_hist)
 #-------------------#
 # writing csv files #
 #-------------------#
-write_csv(df_chain,      "fxy_weekly_2014_2018_chain_desc.csv")
-write_csv(df_chain_hist, "fxy_weekly_2014_2018_chain_hist.csv")
-write_csv(df_opt_hist,   "fxy_weekly_2014_2018_opt_hist.csv")
+write_csv(df_chain,      "gld_monthly_2014_2018_chain_desc.csv")
+write_csv(df_chain_hist, "gld_monthly_2014_2018_chain_hist.csv")
+write_csv(df_opt_hist,   "gld_monthly_2014_2018_opt_hist.csv")
 
 
 

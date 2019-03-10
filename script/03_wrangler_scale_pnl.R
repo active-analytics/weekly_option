@@ -23,19 +23,19 @@ library(tidyverse)
 #####################
 df_chain <- 
     read_csv(
-        "data_output/dia_weekly_2014_2018_chain_desc.csv"
+        "data_output/monthly/xle_monthly_2014_2018_chain_desc.csv"
         , col_types = cols()
     )
 
 df_trade_master <- 
     read_csv(
-        "data_output/dia_weekly_2014_2018_trade_master.csv"
+        "data_output/monthly/xle_monthly_2014_2018_trade_master.csv"
         , col_types = cols()
     )
 
 df_pnl_master <- 
     read_csv(
-        "data_output/dia_weekly_2014_2018_pnl_master.csv"
+        "data_output/monthly/xle_monthly_2014_2018_pnl_master.csv"
         , col_types = cols()
     )
 
@@ -48,7 +48,7 @@ df_call <- df_trade_master %>% dplyr::filter(type == "call")
 df_put <- df_trade_master %>% dplyr::filter(type == "put")    
 
 # The main idea behind this section is that we want to sell about $1 in premium
-# every month to make sure that all the position sizes are similar. I decided
+# each day to make sure that all the position sizes are similar. I decided
 # to use the mid prices to scale the positions, rather than the bid, because
 # I didn't want to take especially large positions in an option, just because
 # it has a very wide bid/ask spread.
@@ -75,20 +75,20 @@ df_position_scaling <-
         ) %>% 
         mutate(
             strangle_mult = 
-                (d2x * 0.05) / (mid.put + mid.call)
+                (d2x * 1.0) / (mid.put + mid.call)
             
             , strangle_prem_sold = 
-                (bid.put + bid.call) * ((d2x * 0.05) / (mid.put + mid.call)) 
+                (bid.put + bid.call) * ((d2x * 1.0) / (mid.put + mid.call)) 
             
-            , put_mult = (d2x * 0.05) / mid.put
+            , put_mult = (d2x * 1.0) / mid.put
             
             , put_prem_sold = 
-                bid.put * ((d2x * 0.05) / mid.put)
+                bid.put * ((d2x * 1.0) / mid.put)
             
-            , call_mult = (d2x * 0.05) / mid.call
+            , call_mult = (d2x * 1.0) / mid.call
             
             , call_prem_sold = 
-                bid.call * ((d2x * 0.05) / mid.call)
+                bid.call * ((d2x * 1.0) / mid.call)
         )
 
 
@@ -185,74 +185,6 @@ for (ix in 1:nrow(df_pnl_scaled)){
 #######################
 ## writing CSV files ##
 #######################
-#write_csv(df_position_scaling, "dia_weekly_2014_2018_position_scaling.csv")
-#write_csv(df_pnl_scaled, "dia_weekly_2014_2018_pnl_scaled.csv")
+write_csv(df_position_scaling, "xle_monthly_2014_2018_position_scaling.csv")
+write_csv(df_pnl_scaled,       "xle_monthly_2014_2018_pnl_scaled.csv")
 
-
-
-#############
-## TESTING ##
-#############
-# df_strangle_pnl_scaled  %>%
-#     group_by(variation, data_date) %>%
-#     summarize(
-#         dly_naked = sum(scaled_dly_opt_pnl)
-#         , dly_dh = sum(scaled_dly_tot_pnl)
-#     ) %>%
-#     group_by(variation) %>%
-#     summarize(
-#         #mean_naked = mean(dly_naked) * 252
-#         #, mean_dh = mean(dly_dh) * 252
-#          sharpe_naked = (mean(dly_naked) / sd(dly_naked)) * sqrt(252)
-#         , sharpe_dh = (mean(dly_dh) / sd(dly_dh)) * sqrt(252)
-#     )
-
-
-
-# df_pnl_scaled %>% 
-#     dplyr::filter(underlying %in% c("SPY", "IWM", "QQQ", "DIA")) %>% 
-#     mutate(
-#         scaled_naked = ttd_opt_pnl * unity_mult
-#         , scaled_dh = ttd_tot_pnl * unity_mult
-#     ) %>% 
-#     dplyr::filter(variation == 0.3) %>%
-#     group_by(trade_date) %>% 
-#     summarize(
-#         naked = sum(scaled_naked)
-#         , delta_hedge = sum(scaled_dh)) %>% 
-#     ggplot() +
-#         geom_line(aes(x = trade_date, y = naked), color = 'green') +
-#         geom_line(aes(x = trade_date, y = delta_hedge), color = 'blue')
-
-
-
-
-
-# df_strangle_pnl_scaled  %>% 
-#     filter(!expiration %in% c(as.Date("2015-04-02"), as.Date("2015-12-19"))) %>% 
-#     filter(expiration <= "2018-11-30") %>% 
-#     distinct(expiration)
-
-# df_test <- read_csv("data_output/20181229_spy_weekly_pnl_strangle_5yr.csv")
-# 
-# 
-# df_test %>%
-#     filter(!expiration %in% c("2014-04-02", "2015-12-19")) %>%
-#     filter(expiration <= "2018-11-30") %>%
-#     mutate(
-#         dly_naked = dly_opt_pnl * strangle_mult
-#         , dly_dh = dly_tot_pnl * strangle_mult
-#     ) %>%
-#     group_by(variation, data_date) %>%
-#     summarize(
-#         dly_naked = sum(dly_naked)
-#         , dly_dh = sum(dly_dh)
-#     ) %>%
-#     group_by(variation) %>%
-#     summarize(
-#         sharpe_naked = (mean(dly_naked) / sd(dly_naked)) * sqrt(252)
-#         , sharpe_dh = (mean(dly_dh) / sd(dly_dh)) * sqrt(252)
-#     )
-# 
-# 
-# df_test %>% distinct(expiration) %>% View()

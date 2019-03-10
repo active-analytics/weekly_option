@@ -34,7 +34,8 @@ chain_monthly <- function(chr_underlying){
     df_exec_date$d2x = NA_integer_
     df_exec_date$num_opts = NA_integer_
     df_exec_date$exec_day_volume = NA_integer_
-    
+    df_exec_date$ret = NA_real_
+    df_exec_date$realized_vol = NA_real_
     
     if(chr_underlying == "SPY"){
         #this is a brute force hack to correct the 12/18/2015 expiration

@@ -47,7 +47,7 @@ source("function/vol_index.R")
 
 ```{r, setting_underlying, include=FALSE}
 
-chr_underlying <- "GDX"
+chr_underlying <- "IWM"
 
 ```
 
@@ -60,7 +60,7 @@ chr_underlying <- "GDX"
 # chain description
 chr_path <- 
     paste0(
-        "data_output/", str_to_lower(chr_underlying)
+        "data_output/weekly/", str_to_lower(chr_underlying)
         , "_weekly_2014_2018_chain_desc.csv"
     )
 df_chain_desc <- read_csv(chr_path)
@@ -68,7 +68,7 @@ df_chain_desc <- read_csv(chr_path)
 # chain history
 chr_path <- 
     paste0(
-        "data_output/", str_to_lower(chr_underlying)
+        "data_output/weekly/", str_to_lower(chr_underlying)
         , "_weekly_2014_2018_chain_hist.csv"
     )
 df_chain_hist <-read_csv(chr_path)
@@ -76,7 +76,7 @@ df_chain_hist <-read_csv(chr_path)
 # option history
 chr_path <- 
     paste0(
-        "data_output/", str_to_lower(chr_underlying)
+        "data_output/weekly/", str_to_lower(chr_underlying)
         , "_weekly_2014_2018_opt_hist.csv"
     )
 df_opt_hist <- read_csv(chr_path)
@@ -84,7 +84,7 @@ df_opt_hist <- read_csv(chr_path)
 # pnl master
 chr_path <- 
     paste0(
-        "data_output/", str_to_lower(chr_underlying)
+        "data_output/weekly/", str_to_lower(chr_underlying)
         , "_weekly_2014_2018_pnl_master.csv"
     )
 df_pnl <- read_csv(chr_path)
@@ -92,7 +92,7 @@ df_pnl <- read_csv(chr_path)
 # trade master
 chr_path <- 
     paste0(
-        "data_output/", str_to_lower(chr_underlying)
+        "data_output/weekly/", str_to_lower(chr_underlying)
         , "_weekly_2014_2018_trade_master.csv"
     )
 df_trade <- read_csv(chr_path)
@@ -100,11 +100,11 @@ df_trade <- read_csv(chr_path)
 
 # SPY pnl master
 df_spy_pnl <-
-    read_csv("data_output/spy_weekly_2014_2018_pnl_master.csv")
+    read_csv("data_output/weekly/spy_weekly_2014_2018_pnl_master.csv")
 
 # SPY trade master
 df_spy_trade <- 
-    read_csv("data_output/spy_weekly_2014_2018_trade_master.csv")
+    read_csv("data_output/weekly/spy_weekly_2014_2018_trade_master.csv")
 ```
 
 
@@ -547,7 +547,7 @@ In the previous section we compared implieds to realized.  Now we are comparing 
 # index comparison
 df_index_comparison <-
     df_chain_hist %>%
-        select(underlying, expiration, trade_date, bid_swap_rate) %>%
+        select(underlying, expiration, trade_date, mid_swap_rate) %>%
         left_join( # to get execution date
             df_chain_desc %>%
                 select(expiration, execution, realized_vol, ret)
@@ -565,7 +565,7 @@ df_index_comparison <-
 # calculating the difference between the bid swap rate and the vol_index
 df_index_comparison <-
     df_index_comparison %>%
-        mutate(vol_diff = bid_swap_rate - vol_index)
+        mutate(vol_diff = mid_swap_rate - vol_index)
 ```
 
 
