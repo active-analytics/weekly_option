@@ -4,7 +4,7 @@ author: "Pritam Dalal"
 date: "3/9/2019"
 output: html_document
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -17,17 +17,73 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 ```
 
+```{r}
+df_underlying <- 
+    tibble(
+        symbol = c("DIA", "EEM", "EWZ", "FXI" ,"GDX", "GLD"
+                       , "IWM", "QQQ", "SLV", "SPY", "USO","XLE")
+    )
+
+df_pnl_weekly <- tibble()
+df_pnl_monthly <- tibble()
+for (ix in 1:nrow(df_underlying)){
+    
+    chr_underlying <- df_underlying$symbol[ix]
+    
+    # weekly
+    chr_path <- 
+    paste0(
+        "data_output/weekly/"
+        , chr_underlying
+        , "_weekly_2014_2018_managed_pnl.csv"
+    )
+    df_pnl_weekly <-
+        df_pnl_weekly %>% 
+        bind_rows(
+            read_csv(chr_path, col_types = cols()) %>% 
+            mutate(underlying = chr_underlying)
+        )
+    
+    # monthly
+    chr_path <- 
+    paste0(
+        "data_output/monthly/"
+        , chr_underlying
+        , "_monthly_2014_2018_managed_pnl.csv"
+    )
+    df_pnl_monthly <-
+        df_pnl_monthly %>% 
+        bind_rows(
+            read_csv(chr_path, col_types = cols()) %>% 
+            mutate(underlying = chr_underlying)
+        )    
+}
+```
+
+
 
 
 ```{r}
-df_pnl <- 
-    read_csv("data_output/monthly/spy_monthly_2014_2018_managed_pnl.csv")
+df_pnl_weekly <- 
+    read_csv("data_output/weekly/dia_weekly_2014_2018_managed_pnl.csv")
+
+df_pnl_monthly <- 
+    read_csv("data_output/monthly/dia_monthly_2014_2018_managed_pnl.csv")
+
+
 ```
 
 
 
 ```{r}
-df_pnl %>% 
+df_pnl_monthly %>% 
+    group_by(underlyin)
+```
+
+
+
+```{r}
+df_pnl_weekly %>% 
     filter(strategy == "strangle") %>% 
     filter(variation == 0.1) %>% 
     filter(dh_threshold == 0) %>% 
@@ -42,7 +98,32 @@ df_pnl %>%
         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
     ) %>% 
     ggplot() + 
-        geom_point(aes(x=loss_trigger, y=sharpe))
+        geom_point(aes(x=loss_trigger, y=sharpe)) +
+        labs(
+            title = "weekly: delta-hedge"
+        )
+
+
+
+df_pnl_monthly %>% 
+    filter(strategy == "strangle") %>% 
+    filter(variation == 0.1) %>% 
+    filter(dh_threshold == 0) %>% 
+    group_by(loss_trigger, data_date) %>% 
+    summarize(
+        dh_pnl = sum(scaled_managed_pnl)
+    ) %>% 
+    group_by(loss_trigger) %>% 
+    summarize(
+        avg_pnl = mean(dh_pnl)
+        , sd_pnl = sd(dh_pnl)
+        , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
+    ) %>% 
+    ggplot() + 
+        geom_point(aes(x=loss_trigger, y=sharpe)) +
+        labs(
+            title = "monthly: delta-hedge"
+        )
 ```
 
 
@@ -52,7 +133,7 @@ df_pnl %>%
 
 
 ```{r}
-df_pnl %>% 
+df_pnl_weekly %>% 
     filter(strategy == "strangle") %>% 
     filter(variation == 0.1) %>% 
     filter(dh_threshold == 1) %>% 
@@ -67,8 +148,35 @@ df_pnl %>%
         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
     ) %>% 
     ggplot() + 
-        geom_point(aes(x=loss_trigger, y=sharpe))
+        geom_point(aes(x=loss_trigger, y=sharpe)) + 
+        labs(
+            title = "weekly: naked"
+        )
+
+
+
+
+df_pnl_monthly %>% 
+    filter(strategy == "strangle") %>% 
+    filter(variation == 0.1) %>%        
+    filter(dh_threshold == 1) %>% 
+    group_by(loss_trigger, data_date) %>% 
+    summarize(
+        dh_pnl = sum(scaled_managed_pnl)
+    ) %>% 
+    group_by(loss_trigger) %>% 
+    summarize(
+        avg_pnl = mean(dh_pnl)
+        , sd_pnl = sd(dh_pnl)
+        , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
+    ) %>% 
+    ggplot() + 
+        geom_point(aes(x = loss_trigger, y = sharpe)) +
+        labs(
+            title = "monthly: naked"
+        )
 ```
+
 
 
 

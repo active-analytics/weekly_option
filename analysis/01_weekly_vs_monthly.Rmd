@@ -1,10 +1,17 @@
 ---
 title: "2014-2018: Weekly vs Monthly"
 author: "Pritam Dalal"
+date: "March 10, 2019"
 output: html_document
 editor_options: 
   chunk_output_type: console
 ---
+
+<style>
+    body .main-container {
+        max-width: 700px;
+    }
+</style>
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -19,7 +26,7 @@ chr_csv_file_names <-
         list.files(
             "data_output/monthly"
             , full.names = TRUE
-            , pattern = ".*_pnl_master.csv*"
+            , pattern = ".*_pnl_scaled.csv*"
         )
 
 lst_monthly <- list()
@@ -40,8 +47,8 @@ chr_csv_file_names <-
         list.files(
             "data_output/weekly"
             , full.names = TRUE
-            , pattern = ".*_pnl_master.csv*"
-        )
+            , pattern = ".*_pnl_scaled.csv*"
+        ) 
 
 lst_weekly <- list()
 for (ix in 1:length(chr_csv_file_names)){
@@ -63,15 +70,13 @@ df_pnl <- bind_rows(df_monthly, df_weekly)
 ```
 
 
-
-
 ```{r, daily_ttd_pnl, include=FALSE, cache=TRUE}
 df_pnl_daily <- 
     df_pnl %>% 
         group_by(tenor, underlying_symbol, variation, data_date) %>% 
         summarize(
-            naked = sum(dly_opt_pnl)
-            , dh = sum(dly_tot_pnl)
+            naked = sum(scaled_dly_opt_pnl)
+            , dh = sum(scaled_dly_tot_pnl)
         ) %>% 
         mutate(
             ttd_naked = cumsum(naked)
@@ -93,39 +98,286 @@ df_sharpe <-
             , sharpe_dh = (mean(dh) / sd(dh)) * sqrt(252)
             
         )
+
+# removed the groupings
+df_sharpe <-
+    ungroup(df_sharpe)
 ```
 
 
 
 
-## Delta-Hedged
+This is the first in a series of analyses where I dig into 12 ETFs which have weekly options, monthly options, and CBOE published volatility index.  
 
 
-```{r}
-# restricting myself only to situations with where sharpe is positive
-# for both
-# 16 of 19 have higher Sharpes
-df_sharpe %>% filter(tenor == "monthly") %>% 
-    left_join(
-        df_sharpe %>% filter(tenor=="weekly")
-        , by = c("underlying_symbol", "variation")
-        , suffix = c("_monthly", "_weekly")
+In particular, he underlyings are: GLD, SLV, IWM, SPY, FXI, USO, EEM, QQQ, EWZ, DIA, GDX.  Some of this data was used for the class project for Spring 2019 FM5990
+
+The weekly expiration included are 1/10/2014 - 12/28/2018.  The monthly expirations included are 1/18/2014 - 12/21/2018.
+
+
+We consider selling 10, 30, 50 delta strangles (variation), both delta-hedged and non-delta hedged.
+
+We are trying to answer the following question: *Is it better to sell weekly or monthly options?*
+
+In all my previous research, it seems like weekly options outperform monthly options, so I am viewing these results through this lense.
+
+### Underlying/Variation Combinations Indiviudally
+In this section we consider underlying/variation cominations individually, and check to see how often the sharpe ratio of the weekly strategy is greater than the sharpe ratio of the monthly strategy.
+
+
+
+This is a perfectly reasonable framework, but there is one small problem: comparing two strategies by sharpe ratio is only meaningful if both of the sharpes are positive, i.e. if both of the strategies had positive returns. In our analysis, some of the underlying/variation combinations have negative returns, and hence a negative sharpe, so we can't use sharpe to rank all strategies.
+
+<br>
+
+#### Restricting to Meaningful Cases
+One work around I tried is restricting myself only those underlying/variation combinations that had meaningful sharpes for both weekly and monthly.
+
+
+**Delta-Hedge**
+```{r, weekly_and_monthly_positive_dh, echo=FALSE, cache=TRUE}
+# restricting only to underlying/variation combinations 
+# with where both tenors have positive returns
+
+# number of total cases
+int_both_positive <- 
+    df_sharpe %>% filter(tenor == "monthly") %>% 
+        left_join(
+            df_sharpe %>% filter(tenor=="weekly")
+            , by = c("underlying_symbol", "variation")
+            , suffix = c("_monthly", "_weekly")
+        ) %>% 
+        filter(avg_dh_weekly > 0) %>% 
+        filter(avg_dh_monthly > 0) %>% 
+        nrow()
+
+# check cases where weekly is better
+int_weekly_better <- 
+    df_sharpe %>% filter(tenor == "monthly") %>% 
+        left_join(
+            df_sharpe %>% filter(tenor=="weekly")
+            , by = c("underlying_symbol", "variation")
+            , suffix = c("_monthly", "_weekly")
+        ) %>% 
+        filter(avg_dh_weekly > 0) %>% 
+        filter(avg_dh_monthly > 0) %>% 
+        filter(sharpe_dh_weekly > sharpe_dh_monthly) %>% 
+        nrow()
+
+# printing results to screen
+print(paste0("Count both positive (delta-hedge): ", int_both_positive))
+print(paste0("Count weekly is better (delta-hedge): ", int_weekly_better))
+print(
+    paste0(
+        "Portion for which weekly better (delta-hedge): "
+        , round(int_weekly_better / int_both_positive, 2)
+    )
+)
+```
+The delta-hedge percentage is 80%, which is seems reasonable.
+
+**Naked**
+```{r, weekly_and_monthly_positive_naked, echo=FALSE, cache=TRUE}
+# restricting only to underlying/variation combinations 
+# with where both tenors have positive returns
+
+# number of total cases
+int_both_positive <- 
+    df_sharpe %>% filter(tenor == "monthly") %>% 
+        left_join(
+            df_sharpe %>% filter(tenor=="weekly")
+            , by = c("underlying_symbol", "variation")
+            , suffix = c("_monthly", "_weekly")
+        ) %>% 
+        filter(avg_naked_weekly > 0) %>% 
+        filter(avg_naked_monthly > 0) %>% 
+        nrow()
+
+# check cases where weekly is better
+int_weekly_better <- 
+    df_sharpe %>% filter(tenor == "monthly") %>% 
+        left_join(
+            df_sharpe %>% filter(tenor=="weekly")
+            , by = c("underlying_symbol", "variation")
+            , suffix = c("_monthly", "_weekly")
+        ) %>% 
+        filter(avg_naked_weekly > 0) %>% 
+        filter(avg_naked_monthly > 0) %>% 
+        filter(sharpe_naked_weekly > sharpe_naked_monthly) %>% 
+        nrow()
+
+# printing results to screen
+print(paste0("Count both positive (naked): ", int_both_positive))
+print(paste0("Count weekly is better (naked): ", int_weekly_better))
+print(
+    paste0(
+        "Portion for which weekly better (naked): "
+        , round(int_weekly_better / int_both_positive, 2)
+    )
+)
+```
+The naked percentage of 40% seems a bit low, but I'm not too concerned.
+
+<br>
+
+#### Compare with Rank-Sharpe
+
+Another work around that I came up with is the concept of a rank-Sharpe, which is gotten by taking the rank of the avg-pnl and dividing by the rank of the stdev-pnl.  This worked pretty well, and gave  the expected results.
+
+For both naked and delta-hedge there are 36 combinations: 3 delta-variations and 12 underlyings.
+
+```{r, rank_sharpe_ratio_calc, include=FALSE, cache=TRUE}
+df_rank_sharpe <- 
+    df_sharpe %>% 
+        mutate(
+            avg_naked_rank = rank(avg_naked)
+            , sd_naked_rank = rank(sd_naked)
+            , avg_dh_rank = rank(avg_dh)
+            , sd_dh_rank = rank(sd_dh)
+        ) %>% 
+        mutate(
+            rank_sharpe_naked = avg_naked_rank / sd_naked_rank
+            , rank_sharpe_dh = avg_dh_rank / sd_dh_rank
+        )
+
+```
+
+**Delta-Hedge**
+```{r, delta_hedge_sharpe_rank_test, echo=FALSE, cache=TRUE}
+int_weekly_better <-
+    df_rank_sharpe %>% filter(tenor=="monthly") %>% 
+        left_join(
+            df_rank_sharpe %>% filter(tenor=="weekly")
+            , by = c("underlying_symbol", "variation")
+            , suffix = c("_monthly", "_weekly")
+        ) %>% 
+        filter(
+           rank_sharpe_dh_weekly > rank_sharpe_dh_monthly 
+        ) %>% 
+        nrow()
+
+
+print(
+    paste0("weekly better than monthly (delta-hedge): ", int_weekly_better, " of 36.")
+)
+
+print(
+    paste0("Percent (delta-hedge): ", round(int_weekly_better / 36, 2))
+)
+```
+
+The delta-hedge percentage of 83% looks as expected.
+
+**Naked:**
+```{r, naked_sharpe_rank_test, echo=FALSE}
+int_weekly_better <-
+        df_rank_sharpe %>% filter(tenor=="monthly") %>% 
+        left_join(
+            df_rank_sharpe %>% filter(tenor=="weekly")
+            , by = c("underlying_symbol", "variation")
+            , suffix = c("_monthly", "_weekly")
+        ) %>% 
+        filter(
+           rank_sharpe_naked_weekly > rank_sharpe_naked_monthly 
+        ) %>% 
+        nrow()
+
+
+print(
+    paste0("weekly better than monthly (naked): ", int_weekly_better, " of 36.")
+)
+
+print(
+    paste0("Percent (naked): ", round(int_weekly_better / 36, 2))
+)
+```
+
+The naked percentage of 92% looks as googd also.
+
+
+<br>
+
+
+### Sharpe Ratio All Underlyings Combined
+In this section we aggregate all the underlyings together for each tenor/delta-variation combination.
+
+```{r, graph_sharpe_ratio_underlyings_combined_dh, echo=FALSE, cache=TRUE, fig.height=3, fig.width=7.5}
+df_pnl %>% 
+    group_by(tenor, variation, data_date) %>% 
+    summarize(
+            naked = sum(scaled_dly_opt_pnl)
+            , dh = sum(scaled_dly_tot_pnl)
+        )  %>% 
+    group_by(tenor, variation) %>% 
+    summarize(
+        avg_naked = mean(naked)
+        , avg_dh = mean(dh)
+        , sd_naked = sd(naked)
+        , sd_dh = sd(dh)
+        , sharpe_naked = (mean(naked) / sd(naked)) * sqrt(252)
+        , sharpe_dh = (mean(dh) / sd(dh)) * sqrt(252)
+        
     ) %>% 
-    filter(avg_dh_weekly > 0) %>% 
-    filter(avg_dh_monthly > 0) %>% 
-    filter(sharpe_dh_weekly > sharpe_dh_monthly)
-
+    ggplot(aes(x = tenor, y = sharpe_dh, fill=tenor)) +
+    geom_bar(stat = "identity", position = "dodge")  +
+    geom_text(aes(label=round(sharpe_dh, 2), vjust=-0.25)) + 
+    facet_wrap(~factor(variation)) +
+    ylim(-.25, 1.4) +
+    labs(
+        title = "Delta-Hedge: Sharpe All Underlying Combined"
+        , subtitle = "Monthy vs Weekly"
+        , x = "delta-variation"
+        , y = "sharpe-ratio"
+    )
 ```
 
 
 
-```{r, graphing_dh, cache=TRUE, fig.width=6, fig.height=25}
+
+```{r, graph_sharpe_ratio_underlyings_combined_naked, echo=FALSE,fig.height=3, fig.width=7.5, cache=TRUE}
+df_pnl %>% 
+    group_by(tenor, variation, data_date) %>% 
+    summarize(
+            naked = sum(scaled_dly_opt_pnl)
+            , dh = sum(scaled_dly_tot_pnl)
+        )  %>% 
+    group_by(tenor, variation) %>% 
+    summarize(
+        avg_naked = mean(naked)
+        , avg_dh = mean(dh)
+        , sd_naked = sd(naked)
+        , sd_dh = sd(dh)
+        , sharpe_naked = (mean(naked) / sd(naked)) * sqrt(252)
+        , sharpe_dh = (mean(dh) / sd(dh)) * sqrt(252)
+        
+    ) %>% 
+    ggplot(aes(x = tenor, y = sharpe_naked, fill=tenor)) +
+    geom_bar(stat = "identity", position = "dodge")  +
+    geom_text(aes(label=round(sharpe_naked, 2), vjust=-0.25)) + 
+    facet_wrap(~factor(variation)) +
+    ylim(-0.25 , 1.4) +
+    labs(
+        title = "Naked: Sharpe All Underlyings Combined"
+        , subtitle = "Monthy vs Weekly"
+        , x = "delta-variation"
+        , y = "sharpe-ratio"
+    )
+```
+
+<br>
+
+
+### Appendix - Underlyings Individually
+Here are all the underlyings individually.
+
+#### Delta Hedge
+```{r, graphing_dh, echo=FALSE, cache=TRUE, fig.width=7.5, fig.height=25}
 df_sharpe %>% 
     ggplot(aes(x = tenor, y = sharpe_dh, fill=tenor)) +
     geom_bar(stat = "identity", position = "dodge")  +
     geom_text(aes(label=round(sharpe_dh, 2), vjust=-0.25)) + 
     facet_grid(underlying_symbol~factor(variation)) +
-    ylim(-1, 3) +
+    #ylim(-0.25, 3) +
     labs(
         title = "Sharpe-Ratio by Delta (Delta-Hedge)"
         , subtitle = "Monthy vs Weekly"
@@ -135,31 +387,15 @@ df_sharpe %>%
 ```
 
 
-## Naked
-```{r}
-# restricting myself only to situations with where sharpe is positive
-# for both
-# 9 of 19 have higher Sharpes for weeklys
-df_sharpe %>% filter(tenor == "monthly") %>% 
-    left_join(
-        df_sharpe %>% filter(tenor=="weekly")
-        , by = c("underlying_symbol", "variation")
-        , suffix = c("_monthly", "_weekly")
-    ) %>% 
-    filter(avg_naked_weekly > 0) %>% 
-    filter(avg_naked_monthly > 0) %>% 
-    filter(sharpe_naked_weekly > sharpe_naked_monthly)
 
-```
-
-
-```{r, graphing_naked, cache=TRUE, fig.width=6, fig.height=25}
+#### Naked
+```{r, graphing_naked, echo=FALSE, cache=TRUE, fig.width=7.5, fig.height=25}
 df_sharpe %>% 
     ggplot(aes(x = tenor, y = sharpe_naked, fill=tenor)) +
     geom_bar(stat = "identity", position = "dodge")  +
     geom_text(aes(label=round(sharpe_naked, 2), vjust=-0.25)) + 
     facet_grid(underlying_symbol~factor(variation)) +
-    ylim(-1, 3) +
+    #ylim(-0.25, 3) +
     labs(
         title = "Sharpe-Ratio by Delta (Naked)"
         , subtitle = "Monthy vs Weekly"
@@ -167,9 +403,6 @@ df_sharpe %>%
         , y = "sharpe-ratio"
     )
 ```
-
-
-
 
 
 
