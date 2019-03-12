@@ -4,7 +4,7 @@ author: "Pritam Dalal"
 date: "3/9/2019"
 output: html_document
 editor_options: 
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -34,7 +34,7 @@ for (ix in 1:nrow(df_underlying)){
     chr_path <- 
     paste0(
         "data_output/weekly/"
-        , chr_underlying
+        , str_to_lower(chr_underlying)
         , "_weekly_2014_2018_managed_pnl.csv"
     )
     df_pnl_weekly <-
@@ -48,7 +48,7 @@ for (ix in 1:nrow(df_underlying)){
     chr_path <- 
     paste0(
         "data_output/monthly/"
-        , chr_underlying
+        , str_to_lower(chr_underlying)
         , "_monthly_2014_2018_managed_pnl.csv"
     )
     df_pnl_monthly <-
@@ -64,26 +64,22 @@ for (ix in 1:nrow(df_underlying)){
 
 
 ```{r}
-df_pnl_weekly <- 
-    read_csv("data_output/weekly/dia_weekly_2014_2018_managed_pnl.csv")
-
-df_pnl_monthly <- 
-    read_csv("data_output/monthly/dia_monthly_2014_2018_managed_pnl.csv")
-
+# df_pnl_weekly <- 
+#     read_csv("data_output/weekly/dia_weekly_2014_2018_managed_pnl.csv")
+# 
+# df_pnl_monthly <- 
+#     read_csv("data_output/monthly/dia_monthly_2014_2018_managed_pnl.csv")
+# 
 
 ```
 
 
 
 ```{r}
-df_pnl_monthly %>% 
-    group_by(underlyin)
-```
-
-
-
-```{r}
+# calculating sharpe for "unmanaged" delta-hedge strategy
+# all underlyings combined
 df_pnl_weekly %>% 
+    filter(loss_trigger == 1000) %>% 
     filter(strategy == "strangle") %>% 
     filter(variation == 0.1) %>% 
     filter(dh_threshold == 0) %>% 
@@ -96,7 +92,66 @@ df_pnl_weekly %>%
         avg_pnl = mean(dh_pnl)
         , sd_pnl = sd(dh_pnl)
         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
+    )
+
+
+# calculating sharpe for "unmanaged" naked strategy
+# all underlyings combined
+df_pnl_weekly %>% 
+    filter(loss_trigger == 1000) %>% 
+    filter(strategy == "strangle") %>% 
+    filter(variation == 0.1) %>% 
+    filter(dh_threshold == 1) %>% 
+    group_by(loss_trigger, data_date) %>% 
+    summarize(
+        dh_pnl = sum(scaled_managed_pnl)
     ) %>% 
+    group_by(loss_trigger) %>% 
+    summarize(
+        avg_pnl = mean(dh_pnl)
+        , sd_pnl = sd(dh_pnl)
+        , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
+    )
+
+
+df_pnl_weekly %>% 
+    filter(loss_trigger == 1000) %>% 
+    View()
+```
+
+```{r}
+df_breach_count <- 
+    df_pnl_weekly %>% 
+        group_by(underlying, dh_threshold, loss_trigger, expiration) %>% 
+        summarize(
+            breach = sum(any(breach)) 
+        ) %>% 
+        group_by(dh_threshold, loss_trigger) %>% 
+        summarize(
+            breach_count = sum(breach)
+        )
+   
+
+df_pnl_weekly %>% distinct(loss_trigger) %>% View()
+```
+
+
+```{r}
+df_pnl_weekly %>% 
+    filter(loss_trigger != 1000) %>% 
+    filter(strategy == "strangle") %>% 
+    filter(variation == 0.1) %>% 
+    filter(dh_threshold == 0) %>% 
+    group_by(loss_trigger, data_date) %>% 
+    summarize(
+        dh_pnl = sum(scaled_managed_pnl)
+    ) %>% 
+    group_by(loss_trigger) %>% 
+    summarize(
+        avg_pnl = mean(dh_pnl)
+        , sd_pnl = sd(dh_pnl)
+        , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
+    ) %>%
     ggplot() + 
         geom_point(aes(x=loss_trigger, y=sharpe)) +
         labs(
@@ -106,6 +161,7 @@ df_pnl_weekly %>%
 
 
 df_pnl_monthly %>% 
+    filter(loss_trigger != 1000) %>%
     filter(strategy == "strangle") %>% 
     filter(variation == 0.1) %>% 
     filter(dh_threshold == 0) %>% 
@@ -134,6 +190,7 @@ df_pnl_monthly %>%
 
 ```{r}
 df_pnl_weekly %>% 
+    filter(loss_trigger != 1000) %>%
     filter(strategy == "strangle") %>% 
     filter(variation == 0.1) %>% 
     filter(dh_threshold == 1) %>% 
@@ -156,7 +213,8 @@ df_pnl_weekly %>%
 
 
 
-df_pnl_monthly %>% 
+df_pnl_monthly %>%
+    filter(loss_trigger != 1000) %>%
     filter(strategy == "strangle") %>% 
     filter(variation == 0.1) %>%        
     filter(dh_threshold == 1) %>% 
@@ -169,7 +227,7 @@ df_pnl_monthly %>%
         avg_pnl = mean(dh_pnl)
         , sd_pnl = sd(dh_pnl)
         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
-    ) %>% 
+    ) %>%
     ggplot() + 
         geom_point(aes(x = loss_trigger, y = sharpe)) +
         labs(

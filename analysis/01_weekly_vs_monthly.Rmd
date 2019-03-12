@@ -110,23 +110,29 @@ df_sharpe <-
 This is the first in a series of analyses where I dig into 12 ETFs which have weekly options, monthly options, and CBOE published volatility index.  
 
 
-In particular, he underlyings are: GLD, SLV, IWM, SPY, FXI, USO, EEM, QQQ, EWZ, DIA, GDX.  Some of this data was used for the class project for Spring 2019 FM5990
+In particular, the underlyings are: GLD, SLV, IWM, SPY, FXI, USO, EEM, QQQ, EWZ, DIA, GDX.  Some of this data was used for the class project for Spring 2019 FM5990
 
 The weekly expiration included are 1/10/2014 - 12/28/2018.  The monthly expirations included are 1/18/2014 - 12/21/2018.
 
 
 We consider selling 10, 30, 50 delta strangles (variation), both delta-hedged and non-delta hedged.
 
-We are trying to answer the following question: *Is it better to sell weekly or monthly options?*
+In this analysis, we are trying to answer the following question: *Is it better to sell weekly or monthly options?*
 
-In all my previous research, it seems like weekly options outperform monthly options, so I am viewing these results through this lense.
+In all my previous research, the evidence points to weekly options outperforming monthly options, so I am viewing these results through this lense.
 
 ### Underlying/Variation Combinations Indiviudally
-In this section we consider underlying/variation cominations individually, and check to see how often the sharpe ratio of the weekly strategy is greater than the sharpe ratio of the monthly strategy.
+In this section we consider underlying/variation cominations individually, and check to see how often the sharpe ratio of the weekly strategy is greater than the sharpe ratio of the analogous monthly strategy.
 
 
 
-This is a perfectly reasonable framework, but there is one small problem: comparing two strategies by sharpe ratio is only meaningful if both of the sharpes are positive, i.e. if both of the strategies had positive returns. In our analysis, some of the underlying/variation combinations have negative returns, and hence a negative sharpe, so we can't use sharpe to rank all strategies.
+This is a perfectly reasonable framework, but there is one small problem: comparing two strategies by sharpe ratio is only meaningful if both of the sharpes are positive, i.e. if both of the strategies had positive returns. In our analysis, some of the underlying/variation/tenor combinations have negative returns, and hence a negative sharpe, so we can't use sharpe to rank all strategies.
+
+There are two work around to this:
+
+1. Limiting the analysis to underlying/variation combinations where both tenors have a positive sharpe ratio.
+
+2. Using the rank-sharpe ratio to compare the tenors.
 
 <br>
 
@@ -174,7 +180,7 @@ print(
     )
 )
 ```
-The delta-hedge percentage is 80%, which is seems reasonable.
+The delta-hedge percentage is 80%, which seems reasonable.
 
 **Naked**
 ```{r, weekly_and_monthly_positive_naked, echo=FALSE, cache=TRUE}
@@ -222,9 +228,9 @@ The naked percentage of 40% seems a bit low, but I'm not too concerned.
 
 #### Compare with Rank-Sharpe
 
-Another work around that I came up with is the concept of a rank-Sharpe, which is gotten by taking the rank of the avg-pnl and dividing by the rank of the stdev-pnl.  This worked pretty well, and gave  the expected results.
+Another work around that I came up with is the concept of a rank-Sharpe, which is calculated by taking the rank of the avg-pnl and dividing by the rank of the stdev-pnl.  This worked well, and gave  the expected results.
 
-For both naked and delta-hedge there are 36 combinations: 3 delta-variations and 12 underlyings.
+For both naked and delta-hedge there are 36 underlying/variation combinations: 3 delta-variations and 12 underlyings.
 
 ```{r, rank_sharpe_ratio_calc, include=FALSE, cache=TRUE}
 df_rank_sharpe <- 
@@ -299,7 +305,7 @@ The naked percentage of 92% looks as googd also.
 
 
 ### Sharpe Ratio All Underlyings Combined
-In this section we aggregate all the underlyings together for each tenor/delta-variation combination.
+In this section we aggregate all the underlyings together for each tenor/delta-variation combination, and then calculate the sharpe ratios for the weekly and monthly strategies.
 
 ```{r, graph_sharpe_ratio_underlyings_combined_dh, echo=FALSE, cache=TRUE, fig.height=3, fig.width=7.5}
 df_pnl %>% 
@@ -368,7 +374,7 @@ df_pnl %>%
 
 
 ### Appendix - Underlyings Individually
-Here are all the underlyings individually.
+In this appendix, we graph the sharpes for all the underlyings individually.
 
 #### Delta Hedge
 ```{r, graphing_dh, echo=FALSE, cache=TRUE, fig.width=7.5, fig.height=25}

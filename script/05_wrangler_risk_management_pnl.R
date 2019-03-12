@@ -21,14 +21,11 @@ for (ix in 1:nrow(df_underlying)){
     #####################
     chr_path <- 
         paste0(
-            "data_output/weekly/"
+            "data_output/monthly/"
             , chr_underying
-            , "_weekly_2014_2018_chain_pnl.csv"
+            , "_monthly_2014_2018_chain_pnl.csv"
         )
-    #df_chain_pnl_all <- 
-        #read_csv("data_output/weekly/spy_weekly_2014_2018_chain_pnl.csv")
-    df_chain_pnl_all <- 
-        read_csv(chr_path)
+    df_chain_pnl_all <- read_csv(chr_path)
     
     
     
@@ -51,7 +48,7 @@ for (ix in 1:nrow(df_underlying)){
     df_management_level <-
         crossing(
             dh_threshold = c(0, 1)
-            , loss_trigger = seq(0.10, 10.00, 0.10)
+            , loss_trigger = c(seq(0.10, 10.00, 0.10), 1000)
         )
     
     
@@ -202,9 +199,8 @@ for (ix in 1:nrow(df_underlying)){
     chr_path <- 
         paste0(
             str_to_lower(chr_underying)
-            , "_weekly_2014_2018_managed_pnl.csv"
+            , "_monthly_2014_2018_managed_pnl.csv"
         )
-    #write_csv(df_managed_pnl, "spy_weekly_2014_2018_managed_pnl.csv")
     write_csv(df_managed_pnl, chr_path)
     
     
