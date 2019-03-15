@@ -1,0 +1,1681 @@
+---
+title: "Ranking Underlyings with GARCH"
+author: "Pritam Dalal"
+date: "3/15/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+<style>
+    body .main-container {
+        max-width: 700px;
+    }
+</style>
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, loading_packages, include=FALSE, cache=FALSE}
+library(tidyverse)
+library(lubridate)
+```
+
+
+<!-- DATA PREP -->
+
+```{r, reading_data, include=FALSE, cache=TRUE}
+# using a for-loop to read all managed PNL data and bind them 
+# together into a single dataframe.
+
+df_underlying <- 
+    tibble(
+        symbol = c("DIA", "EEM", "EWZ", "FXI" ,"GDX", "GLD"
+                       , "IWM", "QQQ", "SLV", "SPY", "USO","XLE")
+    )
+
+df_pnl_weekly <- tibble()
+df_pnl_monthly <- tibble()
+for (ix in 1:nrow(df_underlying)){
+    
+    chr_underlying <- df_underlying$symbol[ix]
+    
+    # weekly
+    chr_path <- 
+    paste0(
+        "data_output/weekly/"
+        , str_to_lower(chr_underlying)
+        , "_weekly_2014_2018_managed_pnl.csv"
+    )
+    df_pnl_weekly <-
+        df_pnl_weekly %>% 
+        bind_rows(
+            read_csv(chr_path, col_types = cols()) %>% 
+            mutate(underlying = chr_underlying)
+        )
+    
+    # monthly
+    chr_path <- 
+    paste0(
+        "data_output/monthly/"
+        , str_to_lower(chr_underlying)
+        , "_monthly_2014_2018_managed_pnl.csv"
+    )
+    df_pnl_monthly <-
+        df_pnl_monthly %>% 
+        bind_rows(
+            read_csv(chr_path, col_types = cols()) %>% 
+            mutate(underlying = chr_underlying)
+        )    
+}
+```
+
+
+
+
+```{r, reading_garch, include=FALSE, cache=TRUE}
+# using a for-loop to read all garch forecasts and bind them 
+# together into a single dataframe.
+df_underlying <- 
+    tibble(
+        symbol = c("DIA", "EEM", "EWZ", "FXI" ,"GDX", "GLD"
+                    , "IWM", "QQQ", "SLV", "SPY", "USO","XLE")
+    )
+
+df_garch_weekly <- tibble()
+df_garch_monthly <- tibble()
+for (ix in 1:nrow(df_underlying)){
+    
+    chr_underlying <- df_underlying$symbol[ix]
+    
+    # weekly
+    chr_path <- 
+    paste0(
+        "data_output/weekly/"
+        , str_to_lower(chr_underlying)
+        , "_weekly_2014_2018_garch.csv"
+    )
+    df_garch_weekly <-
+        df_garch_weekly %>% 
+        bind_rows(
+            read_csv(chr_path, col_types = cols()) %>% 
+            mutate(underlying = chr_underlying)
+        )
+    
+    # monthly
+    chr_path <- 
+    paste0(
+        "data_output/monthly/"
+        , str_to_lower(chr_underlying)
+        , "_monthly_2014_2018_garch.csv"
+    )
+    df_garch_monthly <-
+        df_garch_monthly %>% 
+        bind_rows(
+            read_csv(chr_path, col_types = cols()) %>% 
+            mutate(underlying = chr_underlying)
+        )    
+}
+```
+
+
+```{r, reading_chain_hist, include=FALSE, cache=TRUE}
+# using a for-loop to read all chain histories and bind them 
+# together into a single dataframe.
+
+df_underlying <- 
+    tibble(
+        symbol = c("DIA", "EEM", "EWZ", "FXI" ,"GDX", "GLD"
+                   , "IWM", "QQQ", "SLV", "SPY", "USO","XLE")
+    )
+
+df_chain_hist_weekly <- tibble()
+df_chain_hist_monthly <- tibble()
+for (ix in 1:nrow(df_underlying)){
+    
+    chr_underlying <- df_underlying$symbol[ix]
+    
+    # weekly
+    chr_path <- 
+    paste0(
+        "data_output/weekly/"
+        , str_to_lower(chr_underlying)
+        , "_weekly_2014_2018_chain_hist.csv"
+    )
+    df_chain_hist_weekly <-
+        df_chain_hist_weekly %>% 
+        bind_rows(
+            read_csv(chr_path, col_types = cols()) %>% 
+            mutate(underlying = chr_underlying)
+        )
+    
+    # monthly
+    chr_path <- 
+    paste0(
+        "data_output/monthly/"
+        , str_to_lower(chr_underlying)
+        , "_monthly_2014_2018_chain_hist.csv"
+    )
+    df_chain_hist_monthly <-
+        df_chain_hist_monthly %>% 
+        bind_rows(
+            read_csv(chr_path, col_types = cols()) %>% 
+            mutate(underlying = chr_underlying)
+        )    
+}
+```
+
+
+```{r, calc_vol_prem_fcst, cache=TRUE, include=FALSE}
+# checking for any garch forecasts that didn't get fit
+df_garch_monthly %>% filter(is.na(garch_forecast))
+
+# checking for any garch forecasts that didn't get fit
+df_garch_weekly %>% filter(is.na(garch_forecast))
+
+# joining together bid swap rates and garch forecasts and then calculating
+# volatility premium forecasts
+df_garch_weekly <- 
+    df_garch_weekly %>% 
+        left_join(
+            df_chain_hist_weekly 
+                %>% select(underlying, expiration, trade_date, bid_swap_rate)
+            , by = c("underlying", "expiration", "execution" = "trade_date")
+        ) %>%  
+        mutate(
+            vol_prem_fcst = bid_swap_rate - garch_forecast
+        )
+```
+
+
+
+```{r, calc_garch_rank, include=FALSE, cache=TRUE}
+# for each expiration, ranking each underlying by 
+# its volatility premium forecast.
+df_garch_weekly <- 
+    df_garch_weekly %>% 
+        group_by(expiration) %>% 
+        mutate(vol_prem_rank = rank(-vol_prem_fcst))
+
+df_garch_weekly <- 
+    df_garch_weekly %>% 
+        arrange(expiration, vol_prem_rank)
+```
+
+
+In this analysis, we calculate GARCH forecasts for each underlying/expiration combination.  We then calculate a forecasted volatility premium for each underlying, and rank the underlyings using this forecast.  We then compare the performance of different groupings: halves, thirds, fourths, sixths, and twelfths.  
+
+In the case of halves, thirds, and fourth, the results are quite stable and as expected: the groups with higher volatility premiums forecasts have higher performance.  For more granular groupings, the data is more noisy, but the general directional point in the right direction - higher ranking leads to better performance.
+
+
+### Halves
+
+The simplest grouping of underlyings per expiration is to consider the top-half and bottom-half.
+```{r, halves_calc, cache=TRUE, include=FALSE}
+# halves
+my_grouping <- function(rank){
+    if (rank <= 6) {
+       g = 1L 
+    }
+    else {
+        g = 2L
+    }
+    g
+}
+
+df_garch_weekly <- 
+    df_garch_weekly %>% 
+        mutate(
+            vol_prem_group = map_int(vol_prem_rank, my_grouping)
+        )
+
+df_sharpe <- 
+    df_pnl_weekly %>% 
+        left_join(
+            df_garch_weekly %>% select(underlying, expiration, vol_prem_group)
+            , by = c("underlying", "expiration")    
+        ) %>% 
+        group_by(dh_threshold, loss_trigger, vol_prem_group, data_date) %>%
+        summarize(
+            pnl = sum(scaled_managed_pnl)
+        ) %>% 
+        summarize(
+            sharpe = (mean(pnl) / sd(pnl)) * sqrt(252)
+        )
+
+
+
+df_sharpe_by_year <- 
+    df_pnl_weekly %>% 
+        left_join(
+            df_garch_weekly %>% select(underlying, expiration, vol_prem_group)
+            , by = c("underlying", "expiration")    
+        ) %>%
+        group_by(dh_threshold, loss_trigger, vol_prem_group, data_date) %>%
+        summarize(
+            pnl = sum(scaled_managed_pnl)
+        ) %>% 
+        mutate(data_year = year(data_date)) %>% 
+        group_by(dh_threshold, loss_trigger, vol_prem_group, data_year) %>% 
+        summarize(
+            sharpe = (mean(pnl) / sd(pnl)) * sqrt(252)
+        )
+```
+
+
+As we can see from the following bar graph, there is significantly better performance in the top group as compared to the bottom group, particularly when delta-hedging.
+
+
+
+```{r, halves_results, include=TRUE, cache=TRUE, echo=FALSE, fig.height=4, fig.width=6, fig.align="center"}
+# sharpes for no risk management
+df_sharpe %>% 
+    filter(loss_trigger == 1000) %>% 
+    ggplot(aes(x = factor(vol_prem_group), y=sharpe, fill=factor(vol_prem_group))) +
+        geom_text(aes(label = round(sharpe, 2), vjust = -0.25)) + 
+        geom_bar(stat = "identity", position = "dodge") +
+        facet_wrap(~dh_threshold) +
+        ylim(0, 1.55) +
+        labs(
+            title = "Halves - sharpe ratio by group"
+            , subtitle = "faceted by hedging"
+            , fill = "group"
+            , x = "group"
+        )
+
+```
+
+
+
+The following bar graph show how many times each underlying was in the top group, this seems pretty strongly correlated with the overall performance of the underlying over the five year period.
+
+
+```{r, top_count, cache=TRUE, echo=FALSE, fig.height=4}
+df_counts <- 
+    df_garch_weekly %>% 
+        filter(vol_prem_group == 1) %>% 
+        group_by(underlying) %>% 
+        tally() %>% 
+        arrange(desc(n))
+
+
+df_counts %>% 
+    ggplot(aes(x=reorder(underlying, n), y = n)) +
+        coord_flip() + 
+        geom_bar(stat = "identity") +
+        labs(
+            title = "Number of times in top group"
+            , x = "underlying"
+            , y = "count"
+        )
+    
+```
+
+
+
+The following two graphs show that for all loss-trigger levels, the top-half outperforms the bottom half.  It also seems that loss-trigger risk-management is more effective for the top half, but it's hard to know if this is just a random artifact of the data.
+
+
+```{r, halves_graph_loss_trigger, include=TRUE, cache=TRUE, echo=FALSE}
+df_sharpe %>% 
+    filter(dh_threshold == 0) %>% 
+    filter(loss_trigger != 1000) %>% 
+    ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) +
+        #geom_point() +
+        geom_smooth(se = FALSE, method = "loess", formula = "y ~ x") +
+        labs(
+            title = "Halves - sharpe by loss-trigger (delta-hedge)"
+        )
+
+df_sharpe %>% 
+    filter(dh_threshold == 1) %>% 
+    filter(loss_trigger != 1000) %>% 
+    ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) +
+        #geom_point() +
+        geom_smooth(se = FALSE, method = "loess", formula = "y ~ x") +
+        labs(
+            title = "Halves - sharpe by loss-trigger (naked)"
+        )
+```
+
+
+It is interesting to check if the out-performance of the top group occurs for each year.  This seems to be mostly the case, but it's not 100% true.  In the case of delta-hedging, for 2017 and 2018, the bottom group performed better.  In the case of naked options, the bottom group performed better in 2018. 
+
+The fact that the top group didn't outperform in all years is a bit dissatisfying.  However, there is probably not enough data to make these results too concerning.  Also, there were some underlyings that were hit much harder in 2018, and those may have had higher forecasted vol premium, just by chance.
+
+
+```{r, halves_sharpe_by_year, echo=FALSE, cache=TRUE}
+df_sharpe_by_year %>%
+    filter(loss_trigger == 1000) %>% 
+    filter(dh_threshold == 0) %>% 
+    ggplot(aes(x=data_year, y=sharpe, fill=factor(vol_prem_group))) +
+        geom_bar(stat = "identity", position = "dodge") +
+        labs(
+            title = "Halves - sharpe by year (delta-hedge)"
+            , subtitle = "no risk management"
+        )
+        
+
+df_sharpe_by_year %>%
+    filter(loss_trigger == 1000) %>% 
+    filter(dh_threshold == 1) %>% 
+    ggplot(aes(x=data_year, y=sharpe, fill=factor(vol_prem_group))) +
+        geom_bar(stat = "identity", position = "dodge") +
+        labs(
+            title = "Halves - sharpe by year (naked)"
+            , subtitle = "no risk management"
+        )
+```
+
+
+<br>
+
+### Thirds
+```{r, thirds_calc, include=FALSE, cache=TRUE}
+# thirds
+my_grouping <- function(rank){
+    if (rank %in% c(1, 2, 3, 4)) {
+        g = 1L 
+    }
+    else if (rank %in% c(5, 6, 7, 8)) {
+        g = 2L
+    } else {
+        g = 3L   
+    }
+    g
+}
+
+df_garch_weekly <- 
+    df_garch_weekly %>% 
+        mutate(
+            vol_prem_group = map_int(vol_prem_rank, my_grouping)
+        )
+
+df_sharpe <- 
+    df_pnl_weekly %>% 
+        left_join(
+            df_garch_weekly %>% select(underlying, expiration, vol_prem_group)
+            , by = c("underlying", "expiration")    
+        ) %>% 
+        group_by(dh_threshold, loss_trigger, vol_prem_group, data_date) %>%
+        summarize(
+            pnl = sum(scaled_managed_pnl)
+        ) %>% 
+        summarize(
+            sharpe = (mean(pnl) / sd(pnl)) * sqrt(252)
+        )
+```
+
+
+
+When breaking the underlyings into three groups, we mostly see the expected ordering of performance.  However, in the case of naked option selling the middle does worse than the bottom group. 
+
+
+
+```{r, thirds_results, echo=FALSE, cache=TRUE, fig.height=4, fig.width=6, fig.align="center"}
+df_sharpe %>% 
+    filter(loss_trigger == 1000) %>% 
+    ggplot(aes(x=factor(vol_prem_group), y=sharpe, fill=factor(vol_prem_group))) +
+        geom_text(aes(label=round(sharpe, 2), vjust=-0.25)) + 
+        geom_bar(stat = "identity", position = "dodge") +
+        facet_wrap(~dh_threshold) +
+        labs(
+            title = "Thirds - sharpe ratio by group"
+            , subtitle = "faceted by hedging"
+            , fill = "group"
+            , x = "group"
+        )
+```
+
+
+When graphing the Sharpe by loss-trigger lines, the ordering looks correct. For naked option-selling, the top group seems the most responsive to loss-trigger risk management, but I won't put too much stock in these results unless I see this pattern repeated in subsequent analysis.
+
+```{r, thirds_graphs, echo=FALSE, cache=TRUE}
+df_sharpe %>% 
+    filter(dh_threshold == 0) %>% 
+    filter(loss_trigger != 1000) %>% 
+    ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) +
+        #geom_point() +
+        geom_smooth(se = FALSE, method = "loess", formula = "y ~ x") +
+        labs(
+            title = "Thirds - sharpe by loss-trigger (delta-hedge)"
+            , color = "group"
+        )
+
+df_sharpe %>% 
+    filter(dh_threshold == 1) %>% 
+    filter(loss_trigger != 1000) %>% 
+    ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) +
+        #geom_point() +
+        geom_smooth(se = FALSE, method = "loess", formula = "y ~ x") +
+        labs(
+            title = "Thirds - sharpe by loss-trigger (naked)"
+            , color = "group"
+        )
+```
+
+<br>
+
+### More Granular
+
+I also consider groups of fourths, sixths, and twelfths (singleton).  The results get quite a bit noisier, but they are in general directionally correct, so overall I am satisfied that the GARCH-based volatility premium forecast is predictive.
+
+
+#### Fourths
+```{r, fourths_calc, cache=TRUE, include=FALSE}
+# fourths
+my_grouping <- function(rank){
+    if (rank %in% c(1, 2, 3)) {
+        g = 1L 
+    }
+    else if (rank %in% c(4, 5, 6)) {
+        g = 2L
+    }
+    else if (rank %in% c(7, 8, 9)) {
+        g = 3L
+    } else {
+        g = 4L   
+    }
+    g
+}
+
+df_garch_weekly <- 
+    df_garch_weekly %>% 
+        mutate(
+            vol_prem_group = map_int(vol_prem_rank, my_grouping)
+        )
+
+df_sharpe <- 
+    df_pnl_weekly %>% 
+        left_join(
+            df_garch_weekly %>% select(underlying, expiration, vol_prem_group)
+            , by = c("underlying", "expiration")    
+        ) %>% 
+        group_by(dh_threshold, loss_trigger, vol_prem_group, data_date) %>%
+        summarize(
+            pnl = sum(scaled_managed_pnl)
+        ) %>% 
+        summarize(
+            sharpe = (mean(pnl) / sd(pnl)) * sqrt(252)
+        )
+```
+
+
+
+```{r, fourths_results, echo=FALSE, cache=TRUE}
+df_sharpe %>% 
+    filter(loss_trigger == 1000) %>% 
+    ggplot(aes(x=factor(vol_prem_group), y=sharpe, fill=factor(vol_prem_group))) +
+        geom_text(aes(label=round(sharpe, 2), vjust=-0.25)) + 
+        geom_bar(stat = "identity", position = "dodge") +
+        facet_wrap(~dh_threshold) +
+        labs(
+            title = "Fourths - sharpe ratio by group"
+            , subtitle = "faceted by hedging"
+            , fill = "group"
+            , x = "group"
+        )
+```
+
+
+
+```{r, fourths_graphs, echo=FALSE, cache=TRUE}
+df_sharpe %>% 
+    filter(dh_threshold == 0) %>% 
+    filter(loss_trigger != 1000) %>% 
+    ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) +
+        #geom_point() +
+        geom_smooth(se = FALSE, method = "loess", formula = "y ~ x") +
+        labs(
+            title = "Fourths - sharpe by loss-trigger (delta-hedge)"
+            , color = "group"
+        )
+
+df_sharpe %>% 
+    filter(dh_threshold == 1) %>% 
+    filter(loss_trigger != 1000) %>% 
+    ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) +
+        #geom_point() +
+        geom_smooth(se = FALSE, method = "loess", formula = "y ~ x") +
+        labs(
+            title = "Fourths - sharpe by loss-trigger (naked options)"
+            , color = "group"
+        )
+```
+
+<br>
+
+#### Sixths
+```{r, sixths_calc, cache=TRUE, include=FALSE}
+# sixths
+my_grouping <- function(rank){
+    if (rank %in% c(1, 2)) {
+        g = 1L 
+    }
+    else if (rank %in% c(3, 4)) {
+        g = 2L
+    }
+    else if (rank %in% c(5, 6)) {
+        g = 3L
+    }
+    else if (rank %in% c(7, 8)) {
+        g = 4L
+    }
+    else if (rank %in% c(9, 10)) {
+        g = 5L
+    } else {
+        g = 6L   
+    }
+    g
+}
+
+df_garch_weekly <- 
+    df_garch_weekly %>% 
+        mutate(
+            vol_prem_group = map_int(vol_prem_rank, my_grouping)
+        )
+
+df_sharpe <- 
+    df_pnl_weekly %>% 
+        left_join(
+            df_garch_weekly %>% select(underlying, expiration, vol_prem_group)
+            , by = c("underlying", "expiration")    
+        ) %>% 
+        group_by(dh_threshold, loss_trigger, vol_prem_group, data_date) %>%
+        summarize(
+            pnl = sum(scaled_managed_pnl)
+        ) %>% 
+        summarize(
+            sharpe = (mean(pnl) / sd(pnl)) * sqrt(252)
+        )
+```
+
+```{r, sixths_results, echo=FALSE, cache=TRUE}
+df_sharpe %>% 
+    filter(loss_trigger == 1000) %>% 
+    ggplot(aes(x=factor(vol_prem_group), y=sharpe, fill=factor(vol_prem_group))) +
+        geom_text(aes(label=round(sharpe, 2), vjust=-0.25)) + 
+        geom_bar(stat = "identity", position = "dodge") +
+        facet_wrap(~dh_threshold) +
+        labs(
+            title = "Sixths - sharpe ratio by group"
+            , subtitle = "faceted by hedging"
+            , fill = "group"
+            , x = "group"
+        )
+```
+
+
+```{r, sixth_graphs, echo=FALSE, cache=TRUE}
+
+df_sharpe %>% 
+    filter(dh_threshold == 0) %>% 
+    filter(loss_trigger != 1000) %>% 
+    ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) +
+        #geom_point() +
+        geom_smooth(se = FALSE, method = "loess", formula = "y ~ x") +
+        labs(
+            title = "Sixths - sharpe by loss-trigger (delta-hedged)"
+            , color = "group"
+        )
+
+df_sharpe %>% 
+    filter(dh_threshold == 1) %>% 
+    filter(loss_trigger != 1000) %>% 
+    ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) +
+        geom_smooth(se = FALSE, method = "loess", formula = "y ~ x") +
+        labs(
+            title = "Sixths - sharpe by loss-trigger (naked)"
+            , color = "group"
+        )
+```
+
+
+
+#### Twelfths
+```{r, twelfths_calc, cache=TRUE, include=FALSE}
+# twelfths
+my_grouping <- function(rank){
+    g = as.integer(rank)
+    g
+}
+
+df_garch_weekly <- 
+    df_garch_weekly %>% 
+        mutate(
+            vol_prem_group = map_int(vol_prem_rank, my_grouping)
+        )
+
+df_sharpe <- 
+    df_pnl_weekly %>% 
+        left_join(
+            df_garch_weekly %>% select(underlying, expiration, vol_prem_group)
+            , by = c("underlying", "expiration")    
+        ) %>% 
+        group_by(dh_threshold, loss_trigger, vol_prem_group, data_date) %>%
+        summarize(
+            pnl = sum(scaled_managed_pnl)
+        ) %>% 
+        summarize(
+            sharpe = (mean(pnl) / sd(pnl)) * sqrt(252)
+        )
+```
+
+
+
+```{r, twelfths_results, echo=FALSE, cache=TRUE}
+df_sharpe %>% 
+    filter(loss_trigger == 1000) %>% 
+    ggplot(aes(x=factor(vol_prem_group), y=sharpe, fill=factor(vol_prem_group))) +
+        geom_text(aes(label=round(sharpe, 2), vjust=-0.25)) + 
+        geom_bar(stat = "identity", position = "dodge") +
+        facet_wrap(~dh_threshold) +
+        labs(
+            title = "Twelfths - sharpe ratio by group"
+            , subtitle = "faceted by hedging"
+            , fill = "group"
+            , x = "group"
+        )
+```
+
+
+```{r, twelfths_graphs, echo=FALSE, cache=TRUE}
+df_sharpe %>% 
+    filter(dh_threshold == 0) %>% 
+    filter(loss_trigger != 1000) %>% 
+    ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) +
+        geom_smooth(se = FALSE, method = "loess", formula = "y ~ x") +
+        labs(
+            title = "Twelfths - sharpe by loss-trigger (delta-hedge)"
+            , color = "ranking"
+        )
+
+
+
+df_sharpe %>% 
+    filter(dh_threshold == 1) %>% 
+    filter(loss_trigger != 1000) %>% 
+    ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) +
+        geom_smooth(se = FALSE, method = "loess", formula = "y ~ x") +
+        labs(
+            title = "Twelfths - sharpe by loss-trigger (naked)"
+            , color = "ranking"
+        )
+```
+
+
+
+### Conclusions
+
+These results demonstrate that GARCH based volatility estimates do provide information about future estimates about volatility.  I have been trading for a couple of months using these estimates to pick the underlyings, and I will continue to do so.
+
+In another analysis it would be interesting to show that with monthly options, there is less information in the GARCH estimates.
+
+<!-- ```{r, cache=TRUE} -->
+<!-- df_top_fcst <-  -->
+<!--     df_garch_weekly %>%  -->
+<!--         filter(vol_prem_rank <= 6) -->
+
+
+
+
+<!-- df_top_pnl <-  -->
+<!--     df_pnl_weekly %>%  -->
+<!--         inner_join( -->
+<!--             df_top_fcst %>% select(expiration, underlying) -->
+<!--             , by = c("expiration", "underlying") -->
+<!--         )  -->
+
+<!-- df_top_pnl %>%  -->
+<!--     filter(loss_trigger == 1000) %>%  -->
+<!--     filter(dh_threshold == 0) %>%  -->
+<!--     group_by(data_date) %>%  -->
+<!--     summarize( -->
+<!--         pnl = sum(scaled_managed_pnl) -->
+<!--     ) %>%  -->
+<!--     summarize( -->
+<!--         sharpe = (mean(pnl) / sd(pnl)) * sqrt(252) -->
+<!--     ) -->
+<!-- ``` -->
+
+
+
+
+<!-- # df_sharpe %>%  -->
+<!-- #     filter(dh_threshold == 0) %>%  -->
+<!-- #     filter(loss_trigger != 1000) %>%  -->
+<!-- #     ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) + -->
+<!-- #         geom_point() + -->
+<!-- #         labs( -->
+<!-- #             title = "Halves - sharpe by loss-trigger (delta-hedge)" -->
+<!-- #         ) -->
+<!-- #  -->
+<!-- # df_sharpe %>%  -->
+<!-- #     filter(dh_threshold == 1) %>%  -->
+<!-- #     filter(loss_trigger != 1000) %>%  -->
+<!-- #     ggplot(aes(x=loss_trigger, y=sharpe, color = factor(vol_prem_group))) + -->
+<!-- #         geom_point() + -->
+<!-- #         labs( -->
+<!-- #             title = "Halves - sharpe by loss-trigger (naked)" -->
+<!-- #         ) -->
+<!-- #  -->
+<!-- #  -->
+<!-- # df_sharpe_by_year %>% -->
+<!-- #     filter(loss_trigger == 1000) %>%  -->
+<!-- #     filter(dh_threshold == 0) %>%  -->
+<!-- #     ggplot(aes(x=data_year, y=sharpe, fill=factor(vol_prem_group))) + -->
+<!-- #         geom_bar(stat = "identity", position = "dodge") + -->
+<!-- #         labs( -->
+<!-- #             title = "Halves - sharpe by year (delta-hedge)" -->
+<!-- #             , subtitle = "no risk management" -->
+<!-- #         ) -->
+<!-- #          -->
+<!-- #  -->
+<!-- #  -->
+<!-- # df_sharpe_by_year %>% -->
+<!-- #     filter(loss_trigger == 1000) %>%  -->
+<!-- #     filter(dh_threshold == 1) %>%  -->
+<!-- #     ggplot(aes(x=data_year, y=sharpe, fill=factor(vol_prem_group))) + -->
+<!-- #         geom_bar(stat = "identity", position = "dodge") + -->
+<!-- #         labs( -->
+<!-- #             title = "Halves - sharpe by year (naked)" -->
+<!-- #             , subtitle = "no risk management" -->
+<!-- #         ) -->
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- ```{r, reading_garch, include=FALSE, cache=TRUE} -->
+<!-- df_underlying <-  -->
+<!--     tibble( -->
+<!--         symbol = c("DIA", "EEM", "EWZ", "FXI" ,"GDX", "GLD" -->
+<!--                     , "IWM", "QQQ", "SLV", "SPY", "USO","XLE") -->
+<!--     ) -->
+
+<!-- df_garch_weekly <- tibble() -->
+<!-- df_garch_monthly <- tibble() -->
+<!-- for (ix in 1:nrow(df_underlying)){ -->
+
+<!--     chr_underlying <- df_underlying$symbol[ix] -->
+
+<!--     # weekly -->
+<!--     chr_path <-  -->
+<!--     paste0( -->
+<!--         "data_output/weekly/" -->
+<!--         , str_to_lower(chr_underlying) -->
+<!--         , "_weekly_2014_2018_garch.csv" -->
+<!--     ) -->
+<!--     df_garch_weekly <- -->
+<!--         df_garch_weekly %>%  -->
+<!--         bind_rows( -->
+<!--             read_csv(chr_path, col_types = cols()) %>%  -->
+<!--             mutate(underlying = chr_underlying) -->
+<!--         ) -->
+
+<!--     # monthly -->
+<!--     chr_path <-  -->
+<!--     paste0( -->
+<!--         "data_output/monthly/" -->
+<!--         , str_to_lower(chr_underlying) -->
+<!--         , "_monthly_2014_2018_garch.csv" -->
+<!--     ) -->
+<!--     df_garch_monthly <- -->
+<!--         df_garch_monthly %>%  -->
+<!--         bind_rows( -->
+<!--             read_csv(chr_path, col_types = cols()) %>%  -->
+<!--             mutate(underlying = chr_underlying) -->
+<!--         )     -->
+<!-- } -->
+<!-- ``` -->
+
+
+
+
+
+
+<!-- ```{r} -->
+<!-- df_bottom_fcst <-  -->
+<!--     df_garch_weekly %>%  -->
+<!--         filter(vol_prem_rank <= 6) -->
+
+
+<!-- df_bottom_pnl <-  -->
+<!--     df_pnl_weekly %>%  -->
+<!--         inner_join( -->
+<!--             df_bottom_fcst %>% select(expiration, underlying) -->
+<!--             , by = c("expiration", "underlying") -->
+<!--         )  -->
+
+<!-- df_bottom_pnl %>%  -->
+<!--     filter(loss_trigger == 1000) %>%  -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     group_by(data_date) %>%  -->
+<!--     summarize( -->
+<!--         pnl = sum(scaled_managed_pnl) -->
+<!--     ) %>%  -->
+<!--     summarize( -->
+<!--         sharpe = (mean(pnl) / sd(pnl)) * sqrt(252) -->
+<!--     ) -->
+<!-- ``` -->
+
+
+
+<!-- <br> -->
+<!-- The purpose of this analysis is to determine the optimal loss-trigger level.  We consider all four combinations of monthly/weekly combined with delta-hedged/naked. -->
+
+
+<!-- We consider all underlyings combined as well as each underlying individually. -->
+
+
+<!-- <br> -->
+
+<!-- ### Data Integrity Check - Comparing to Scaled PNLs -->
+<!-- As an initial sanity check, let's make sure that the unmanaged sharpe are the same as using the scaled PNLs directly.  For the naked positions, there should be a small discrepancy with the naked positions because the risk management code assumes a small delta-hedge on day-one to make the positions delta neutral on day-one. -->
+
+<!-- There is also a discrepany with the delta hedged strategies, which I don't understand.  But the discrepancy seems to be samll so I'm not going to worry about it for now. -->
+
+<!-- ##### weekly delta-hedged (1.23) -->
+<!-- ```{r, data_integrity_unmanaged_weekly_dh, cache=TRUE, echo=FALSE} -->
+<!-- # calculating sharpe for "unmanaged" delta-hedge strategy -->
+<!-- # all underlyings combined -->
+<!-- df_pnl_weekly %>%  -->
+<!--     filter(loss_trigger == 1000) %>%  -->
+<!--     filter(strategy == "strangle") %>%  -->
+<!--     filter(variation == 0.1) %>%  -->
+<!--     filter(dh_threshold == 0) %>%  -->
+<!--     group_by(loss_trigger, data_date) %>%  -->
+<!--     summarize( -->
+<!--         dh_pnl = sum(scaled_managed_pnl) -->
+<!--     ) %>%  -->
+<!--     group_by(loss_trigger) %>%  -->
+<!--     summarize( -->
+<!--         avg_pnl = mean(dh_pnl) -->
+<!--         , sd_pnl = sd(dh_pnl) -->
+<!--         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--     ) -->
+<!-- ``` -->
+
+
+<!-- ##### monthly delta-hedged (0.78) -->
+<!-- ```{r, data_integrity_unmanaged_monthly_dh, cache=TRUE, echo=FALSE} -->
+<!-- # calculating sharpe for "unmanaged" delta-hedge strategy -->
+<!-- # all underlyings combined -->
+<!-- df_pnl_monthly %>%  -->
+<!--     filter(loss_trigger == 1000) %>%  -->
+<!--     filter(strategy == "strangle") %>%  -->
+<!--     filter(variation == 0.1) %>%  -->
+<!--     filter(dh_threshold == 0) %>%  -->
+<!--     group_by(loss_trigger, data_date) %>%  -->
+<!--     summarize( -->
+<!--         dh_pnl = sum(scaled_managed_pnl) -->
+<!--     ) %>%  -->
+<!--     group_by(loss_trigger) %>%  -->
+<!--     summarize( -->
+<!--         avg_pnl = mean(dh_pnl) -->
+<!--         , sd_pnl = sd(dh_pnl) -->
+<!--         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--     ) -->
+<!-- ``` -->
+
+
+
+<!-- ##### weekly naked (0.49) -->
+<!-- ```{r, data_integrity_unmanaged_weekly_naked, cache=TRUE, echo=FALSE} -->
+<!-- # calculating sharpe for "unmanaged" naked strategy -->
+<!-- # all underlyings combined -->
+<!-- df_pnl_weekly %>%  -->
+<!--     filter(loss_trigger == 1000) %>%  -->
+<!--     filter(strategy == "strangle") %>%  -->
+<!--     filter(variation == 0.1) %>%  -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     group_by(loss_trigger, data_date) %>%  -->
+<!--     summarize( -->
+<!--         dh_pnl = sum(scaled_managed_pnl) -->
+<!--     ) %>%  -->
+<!--     group_by(loss_trigger) %>%  -->
+<!--     summarize( -->
+<!--         avg_pnl = mean(dh_pnl) -->
+<!--         , sd_pnl = sd(dh_pnl) -->
+<!--         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--     ) -->
+<!-- ``` -->
+
+
+<!-- ##### monthly naked (0.13) -->
+<!-- ```{r, data_integrity_unmanaged_monthly_naked, cache=TRUE, echo=FALSE} -->
+<!-- # calculating sharpe for "unmanaged" naked strategy -->
+<!-- # all underlyings combined -->
+<!-- df_pnl_monthly %>%  -->
+<!--     filter(loss_trigger == 1000) %>%  -->
+<!--     filter(strategy == "strangle") %>%  -->
+<!--     filter(variation == 0.1) %>%  -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     group_by(loss_trigger, data_date) %>%  -->
+<!--     summarize( -->
+<!--         dh_pnl = sum(scaled_managed_pnl) -->
+<!--     ) %>%  -->
+<!--     group_by(loss_trigger) %>%  -->
+<!--     summarize( -->
+<!--         avg_pnl = mean(dh_pnl) -->
+<!--         , sd_pnl = sd(dh_pnl) -->
+<!--         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--     ) -->
+<!-- ``` -->
+
+<!-- <br> -->
+
+<!-- ### Data-Integrity: Breach Count by Loss-Trigger -->
+
+<!-- ```{r, breach_count_weekly, cache=TRUE, include=FALSE} -->
+<!-- df_breach_count_weekly <-  -->
+<!--     df_pnl_weekly %>%  -->
+<!--         group_by(underlying, dh_threshold, loss_trigger, expiration) %>%  -->
+<!--         summarize( -->
+<!--             breach = sum(any(breach))  -->
+<!--         ) %>%  -->
+<!--         group_by(dh_threshold, loss_trigger) %>%  -->
+<!--         summarize( -->
+<!--             breach_count = sum(breach) -->
+<!--         ) -->
+<!-- ``` -->
+
+
+<!-- ```{r, breach_count_monthly, cache=TRUE, include=FALSE} -->
+<!-- df_breach_count_monthly <-  -->
+<!--     df_pnl_monthly %>%  -->
+<!--         group_by(underlying, dh_threshold, loss_trigger, expiration) %>%  -->
+<!--         summarize( -->
+<!--             breach = sum(any(breach))  -->
+<!--         ) %>%  -->
+<!--         group_by(dh_threshold, loss_trigger) %>%  -->
+<!--         summarize( -->
+<!--             breach_count = sum(breach) -->
+<!--         ) -->
+
+<!-- ``` -->
+
+
+
+<!-- As another sanity check, we consider the number of breaches for each loss trigger level.  The results make sense; here are some observations:  -->
+
+<!-- 1. As the loss-trigger increases, there are less breaches. -->
+
+<!-- 1. For a given loss-trigger level, there are more breaches for naked strategies than for delta-hedged strategies, which is because of the greater PNL variability of those strategies.    -->
+
+<!-- 1. For very low loss-trigger levels, the number of breaches is about the same for delta-hedged and naked. -->
+
+
+<!-- ```{r, graph_breach_count_weekly, cache=TRUE, echo=FALSE} -->
+<!-- df_breach_count_weekly %>%  -->
+<!--     filter(loss_trigger != 1000) %>%  -->
+<!--     ggplot() + -->
+<!--         geom_line( -->
+<!--             aes( -->
+<!--                 x = loss_trigger -->
+<!--                 , y = breach_count -->
+<!--                 , color = factor(dh_threshold)) -->
+<!--                 , size = 0.75 -->
+<!--         ) + -->
+<!--     labs( -->
+<!--         title = "Breaches by Loss Trigger - Weekly" -->
+<!--         , x = "loss-trigger" -->
+<!--         , y = "breach count" -->
+<!--     ) -->
+<!-- ``` -->
+
+
+
+
+<!-- ```{r, graph_breach_count_monthly, cache=TRUE, echo=FALSE} -->
+<!-- df_breach_count_monthly %>%  -->
+<!--     filter(loss_trigger != 1000) %>%  -->
+<!--     ggplot() + -->
+<!--         geom_line( -->
+<!--             aes( -->
+<!--                 x = loss_trigger -->
+<!--                 , y = breach_count -->
+<!--                 , color = factor(dh_threshold)) -->
+<!--                 , size = 0.75 -->
+<!--         ) + -->
+<!--     labs( -->
+<!--         title = "Breaches by Loss Trigger - Monthly" -->
+<!--         , x = "loss-trigger" -->
+<!--         , y = "breach count" -->
+<!--     ) -->
+<!-- ``` -->
+
+<!-- Finally, lets make sure that the breach counts were zero for the loss-trigger=1000. -->
+
+<!-- ```{r, unmanaged_loss_trigger_count, cache=TRUE} -->
+<!-- df_breach_count_weekly %>% filter(loss_trigger == 1000)  -->
+<!-- df_breach_count_monthly %>% filter(loss_trigger == 1000)  -->
+<!-- ``` -->
+
+<!-- <br> -->
+
+<!-- ### All Underlyings Combined -->
+
+<!-- In this section, we consider the strategy of combining all underlyings together and then check for the optimal loss trigger level.   -->
+
+<!-- It seems clear that the only strategy for which a loss-trigger seems to make an impact is on the weekly naked strategy.  It makes sense to me that when you are delta-hedging, a loss-trigger doesn't make that much of an impact (meaning it can only really hurt you) because the delta-hedging itself is doing most of the risk management for you. -->
+
+<!-- I'm not sure why the monthly naked strategy doesn't show a similar pattern - perhaps it's because there isn't enough data. -->
+
+
+
+<!-- ```{r, calc_sharpe, include=FALSE, cache=TRUE} -->
+<!-- # weekly -->
+<!-- df_sharpe_weekly <- -->
+<!--     df_pnl_weekly %>%  -->
+<!--         group_by( -->
+<!--             strategy -->
+<!--             , variation -->
+<!--             , loss_trigger -->
+<!--             , dh_threshold -->
+<!--             , data_date -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             dh_pnl = sum(scaled_managed_pnl) -->
+<!--         ) %>%  -->
+<!--         group_by( -->
+<!--             strategy -->
+<!--             , variation -->
+<!--             , dh_threshold -->
+<!--             , loss_trigger -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             avg_pnl = mean(dh_pnl) -->
+<!--             , sd_pnl = sd(dh_pnl) -->
+<!--             , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--         ) -->
+
+<!-- # monthly -->
+<!-- df_sharpe_monthly <- -->
+<!--     df_pnl_monthly %>%  -->
+<!--         group_by( -->
+<!--             strategy -->
+<!--             , variation -->
+<!--             , loss_trigger -->
+<!--             , dh_threshold -->
+<!--             , data_date -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             dh_pnl = sum(scaled_managed_pnl) -->
+<!--         ) %>%  -->
+<!--         group_by( -->
+<!--             strategy -->
+<!--             , variation -->
+<!--             , dh_threshold -->
+<!--             , loss_trigger -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             avg_pnl = mean(dh_pnl) -->
+<!--             , sd_pnl = sd(dh_pnl) -->
+<!--             , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--         ) -->
+
+<!-- df_sharpe_monthly <- -->
+<!--     df_sharpe_monthly %>% ungroup() -->
+<!-- df_sharpe_weekly <- -->
+<!--     df_sharpe_weekly %>% ungroup() -->
+<!-- ``` -->
+
+<!-- #### weekly delta-hedged -->
+
+<!-- ```{r, combined_weekly_delta_hedge, cache=TRUE} -->
+<!-- # weekly delta-hedged -->
+<!-- df_sharpe_weekly %>%  -->
+<!--     filter(dh_threshold == 0) %>%  -->
+<!--     filter(sharpe == max(sharpe)) %>%  -->
+<!--     select(dh_threshold, loss_trigger, sharpe) -->
+<!-- ``` -->
+
+<!-- #### monthly delta-hedged -->
+
+<!-- ```{r, combined_monthly_delta_hedge, cache=TRUE} -->
+<!-- # monthly delta-hedged -->
+<!-- df_sharpe_monthly %>%  -->
+<!--     filter(dh_threshold == 0) %>%  -->
+<!--     filter(sharpe == max(sharpe)) %>%  -->
+<!--     select(dh_threshold, loss_trigger, sharpe) -->
+
+<!-- ``` -->
+
+<!-- #### weekly naked -->
+
+<!-- ```{r, combined_weekly_naked, cache=TRUE} -->
+<!-- # weekly naked -->
+<!-- df_sharpe_weekly %>%  -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     filter(sharpe == max(sharpe)) %>%  -->
+<!--     select(dh_threshold, loss_trigger, sharpe) -->
+
+<!-- ``` -->
+
+<!-- #### monthly naked -->
+
+<!-- ```{r, combined_monthly_naked, cache=TRUE} -->
+<!-- # monthly naked -->
+<!-- df_sharpe_monthly %>%  -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     filter(sharpe == max(sharpe)) %>%  -->
+<!--     select(dh_threshold, loss_trigger, sharpe) -->
+<!-- ``` -->
+
+
+<!-- #### weekly naked (average of top-5) -->
+<!-- Instead of looking at just the single best loss-trigger level, it's more robust to take the average of the top 5 unwind levels. -->
+<!-- ```{r, avg_top_five, cache=TRUE} -->
+<!-- # weekly naked - average of top 5 loss-trigger levels. -->
+<!-- df_sharpe_weekly %>%  -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     top_n(5, sharpe) %>%  -->
+<!--     .$loss_trigger %>%  -->
+<!--     mean() -->
+
+<!-- ``` -->
+
+<!-- <br> -->
+
+<!-- #### visualization -->
+
+<!-- ```{r, graph_all_combined_weekly_dh, cache=TRUE, echo=FALSE} -->
+<!-- df_pnl_weekly %>%  -->
+<!--     filter(loss_trigger != 1000) %>%  -->
+<!--     filter(strategy == "strangle") %>%  -->
+<!--     filter(variation == 0.1) %>%  -->
+<!--     filter(dh_threshold == 0) %>%  -->
+<!--     group_by(loss_trigger, data_date) %>%  -->
+<!--     summarize( -->
+<!--         dh_pnl = sum(scaled_managed_pnl) -->
+<!--     ) %>%  -->
+<!--     group_by(loss_trigger) %>%  -->
+<!--     summarize( -->
+<!--         avg_pnl = mean(dh_pnl) -->
+<!--         , sd_pnl = sd(dh_pnl) -->
+<!--         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--     ) %>% -->
+<!--     ggplot() +  -->
+<!--         geom_point(aes(x=loss_trigger, y=sharpe)) + -->
+<!--         labs( -->
+<!--             title = "weekly: delta-hedge" -->
+<!--         ) -->
+<!-- ``` -->
+
+
+<!-- ```{r, graph_all_combined_monthly_dh, cache=TRUE, echo=FALSE} -->
+<!-- df_pnl_monthly %>%  -->
+<!--     filter(loss_trigger != 1000) %>% -->
+<!--     filter(strategy == "strangle") %>%  -->
+<!--     filter(variation == 0.1) %>%  -->
+<!--     filter(dh_threshold == 0) %>%  -->
+<!--     group_by(loss_trigger, data_date) %>%  -->
+<!--     summarize( -->
+<!--         dh_pnl = sum(scaled_managed_pnl) -->
+<!--     ) %>%  -->
+<!--     group_by(loss_trigger) %>%  -->
+<!--     summarize( -->
+<!--         avg_pnl = mean(dh_pnl) -->
+<!--         , sd_pnl = sd(dh_pnl) -->
+<!--         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--     ) %>%  -->
+<!--     ggplot() +  -->
+<!--         geom_point(aes(x=loss_trigger, y=sharpe)) + -->
+<!--         labs( -->
+<!--             title = "monthly: delta-hedge" -->
+<!--         ) -->
+<!-- ``` -->
+
+
+
+
+
+<!-- ```{r, graph_all_combined_weekly_naked, cache=TRUE, echo=FALSE} -->
+<!-- df_pnl_weekly %>%  -->
+<!--     filter(loss_trigger != 1000) %>% -->
+<!--     filter(strategy == "strangle") %>%  -->
+<!--     filter(variation == 0.1) %>%  -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     group_by(loss_trigger, data_date) %>%  -->
+<!--     summarize( -->
+<!--         dh_pnl = sum(scaled_managed_pnl) -->
+<!--     ) %>%  -->
+<!--     group_by(loss_trigger) %>%  -->
+<!--     summarize( -->
+<!--         avg_pnl = mean(dh_pnl) -->
+<!--         , sd_pnl = sd(dh_pnl) -->
+<!--         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--     ) %>%  -->
+<!--     ggplot() +  -->
+<!--         geom_point(aes(x=loss_trigger, y=sharpe)) +  -->
+<!--         labs( -->
+<!--             title = "weekly: naked" -->
+<!--         ) -->
+<!-- ``` -->
+
+
+
+
+<!-- ```{r, graph_all_combined_monthly_naked, cache=TRUE, echo=FALSE} -->
+<!-- df_pnl_monthly %>% -->
+<!--     filter(loss_trigger != 1000) %>% -->
+<!--     filter(strategy == "strangle") %>%  -->
+<!--     filter(variation == 0.1) %>%         -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     group_by(loss_trigger, data_date) %>%  -->
+<!--     summarize( -->
+<!--         dh_pnl = sum(scaled_managed_pnl) -->
+<!--     ) %>%  -->
+<!--     group_by(loss_trigger) %>%  -->
+<!--     summarize( -->
+<!--         avg_pnl = mean(dh_pnl) -->
+<!--         , sd_pnl = sd(dh_pnl) -->
+<!--         , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--     ) %>% -->
+<!--     ggplot() +  -->
+<!--         geom_point(aes(x = loss_trigger, y = sharpe)) + -->
+<!--         labs( -->
+<!--             title = "monthly: naked" -->
+<!--         ) -->
+<!-- ``` -->
+
+
+<!-- The optimal unwind level for the weekly naked strategy is when the loss reache 2.25 - 2.50 of initial premium. -->
+
+
+<!-- ### Underlyings Individually -->
+<!-- In the previous section we saw that the weekly naked strategy was the only one that seemed to be positively impacted by a loss-trigger unwind strategy. -->
+
+<!-- So as we examine the underlyings individaully, we will largely focus on the two naked strategies, so as to not overly clutter the analysis with data. -->
+
+<!-- ```{r, calc_sharpe_underlying, include=FALSE, cache=TRUE} -->
+<!-- # weekly -->
+<!-- df_sharpe_underlying_weekly <- -->
+<!--     df_pnl_weekly %>%  -->
+<!--         group_by( -->
+<!--             underlying -->
+<!--             , strategy -->
+<!--             , variation -->
+<!--             , loss_trigger -->
+<!--             , dh_threshold -->
+<!--             , data_date -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             dh_pnl = sum(scaled_managed_pnl) -->
+<!--         ) %>%  -->
+<!--         group_by( -->
+<!--             underlying -->
+<!--             , strategy -->
+<!--             , variation -->
+<!--             , dh_threshold -->
+<!--             , loss_trigger -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             avg_pnl = mean(dh_pnl) -->
+<!--             , sd_pnl = sd(dh_pnl) -->
+<!--             , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--         ) -->
+
+<!-- # monthly -->
+<!-- df_sharpe_underlying_monthly <- -->
+<!--     df_pnl_monthly %>%  -->
+<!--         group_by( -->
+<!--             underlying -->
+<!--             , strategy -->
+<!--             , variation -->
+<!--             , loss_trigger -->
+<!--             , dh_threshold -->
+<!--             , data_date -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             dh_pnl = sum(scaled_managed_pnl) -->
+<!--         ) %>%  -->
+<!--         group_by( -->
+<!--             underlying -->
+<!--             , strategy -->
+<!--             , variation -->
+<!--             , dh_threshold -->
+<!--             , loss_trigger -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             avg_pnl = mean(dh_pnl) -->
+<!--             , sd_pnl = sd(dh_pnl) -->
+<!--             , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--         ) -->
+
+<!-- df_sharpe_underlying_monthly <- -->
+<!--     df_sharpe_underlying_monthly %>% ungroup() -->
+<!-- df_sharpe_underlying_weekly <- -->
+<!--     df_sharpe_underlying_weekly %>% ungroup() -->
+<!-- ``` -->
+
+<!-- ```{r, calc_opt_loss_trigger_underlying, include=FALSE, cache=TRUE} -->
+<!-- lst_result <- list() -->
+<!-- for (ix in 1:nrow(df_underlying)){ -->
+
+<!--     chr_und <- df_underlying$symbol[ix] -->
+
+<!--     # weekly naked -->
+<!--     dbl_opt_loss_trigger <-  -->
+<!--         df_sharpe_underlying_weekly %>%  -->
+<!--             filter(underlying == chr_und) %>%  -->
+<!--             filter(dh_threshold == 1) %>%  -->
+<!--             filter(loss_trigger <= 10) %>%  -->
+<!--             top_n(5, sharpe) %>%  -->
+<!--             .$loss_trigger %>%  -->
+<!--             mean()  -->
+
+<!--     lst_result[[length(lst_result) + 1]] <- -->
+<!--         tibble( -->
+<!--             tenor = "weekly" -->
+<!--             , hedge = "naked" -->
+<!--             , underlying = chr_und -->
+<!--             , opt_loss_trigger = dbl_opt_loss_trigger -->
+<!--         ) -->
+
+<!--     # weekly dh -->
+<!--     dbl_opt_loss_trigger <-  -->
+<!--         df_sharpe_underlying_weekly %>%  -->
+<!--             filter(underlying == chr_und) %>%  -->
+<!--             filter(dh_threshold == 0) %>%  -->
+<!--             filter(loss_trigger <= 10) %>%  -->
+<!--             top_n(5, sharpe) %>%  -->
+<!--             .$loss_trigger %>%  -->
+<!--             mean()  -->
+
+<!--     lst_result[[length(lst_result) + 1]] <- -->
+<!--         tibble( -->
+<!--             tenor = "weekly" -->
+<!--             , hedge = "dh" -->
+<!--             , underlying = chr_und -->
+<!--             , opt_loss_trigger = dbl_opt_loss_trigger -->
+<!--         ) -->
+
+
+<!--     # monthly naked -->
+<!--     dbl_opt_loss_trigger <-  -->
+<!--         df_sharpe_underlying_monthly %>%  -->
+<!--             filter(underlying == chr_und) %>%  -->
+<!--             filter(dh_threshold == 1) %>%  -->
+<!--             filter(loss_trigger <= 10) %>%  -->
+<!--             top_n(5, sharpe) %>%  -->
+<!--             .$loss_trigger %>%  -->
+<!--             mean()  -->
+
+<!--     lst_result[[length(lst_result) + 1]] <- -->
+<!--         tibble( -->
+<!--             tenor = "monthly" -->
+<!--             , hedge = "naked" -->
+<!--             , underlying = chr_und -->
+<!--             , opt_loss_trigger = dbl_opt_loss_trigger -->
+<!--         ) -->
+
+
+<!--     # monthly delta-hedge -->
+<!--     dbl_opt_loss_trigger <-  -->
+<!--         df_sharpe_underlying_monthly %>%  -->
+<!--             filter(underlying == chr_und) %>%  -->
+<!--             filter(dh_threshold == 0) %>%  -->
+<!--             filter(loss_trigger <= 10) %>%  -->
+<!--             top_n(5, sharpe) %>%  -->
+<!--             .$loss_trigger %>%  -->
+<!--             mean()  -->
+
+<!--     lst_result[[length(lst_result) + 1]] <- -->
+<!--         tibble( -->
+<!--             tenor = "monthly" -->
+<!--             , hedge = "dh" -->
+<!--             , underlying = chr_und -->
+<!--             , opt_loss_trigger = dbl_opt_loss_trigger -->
+<!--         ) -->
+
+
+<!-- } -->
+
+<!-- df_opt_loss_trigger <- bind_rows(lst_result) -->
+<!-- ``` -->
+
+
+<!-- #### Average Optimal Loss-Trigger -->
+<!-- In this subsection, for each of the four tenor/hedging combinations, we calcualte the average optimal loss-trigger, where the average is taken over the underlyings. -->
+<!-- ```{r, avg_optimal_loss_trigger, cache=TRUE} -->
+<!-- df_opt_loss_trigger %>%  -->
+<!--     group_by(tenor, hedge) %>%  -->
+<!--     summarize( -->
+<!--         opt_loss_trigger = mean(opt_loss_trigger) -->
+<!--     ) -->
+<!-- ``` -->
+
+<!-- The delta-hedge optimals are lower than I expected, but I have to admit that it's hard for me to clearly interpret these results.  It's good to see that the delta-hedge averages are higher than the naked averages. -->
+
+<!-- #### Optimal Level for each Underlying -->
+
+<!-- ```{r,  cache=TRUE} -->
+<!-- df_opt_loss_trigger %>%  -->
+<!--     filter(tenor == "weekly") %>%  -->
+<!--     filter(hedge == "naked") %>%  -->
+<!--     arrange(opt_loss_trigger) -->
+
+<!-- df_opt_loss_trigger %>%  -->
+<!--     filter(tenor == "weekly") %>%  -->
+<!--     filter(hedge == "dh") %>%  -->
+<!--     arrange(opt_loss_trigger) -->
+
+<!-- df_opt_loss_trigger %>%  -->
+<!--     filter(tenor == "monthly") %>%  -->
+<!--     filter(hedge == "naked") %>%  -->
+<!--     arrange(opt_loss_trigger) -->
+
+<!-- df_opt_loss_trigger %>%  -->
+<!--     filter(tenor == "monthly") %>%  -->
+<!--     filter(hedge == "dh") %>%  -->
+<!--     arrange(opt_loss_trigger) -->
+
+<!-- ``` -->
+
+<!-- <br> -->
+
+<!-- #### Visualizing the Naked Strategies  -->
+<!-- In this section we examine the faceted graphs of sharpe by loss trigger, so that we can examine the underlyings individually.  All the graphs are pretty noisy, especially the monthly ones.  However, I do hold out some hope that there is an optimal loss unwind strategy for monthlys also. -->
+
+<!-- ```{r, cache=TRUE, echo=FALSE, fig.height=20} -->
+<!-- df_sharpe_underlying_weekly %>%  -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     filter(loss_trigger != 1000) %>%  -->
+<!--     ggplot(aes(x = loss_trigger, y = sharpe)) + -->
+<!--         geom_point() +  -->
+<!--         facet_wrap(~underlying, nrow = 6, ncol = 2) + -->
+<!--     labs( -->
+<!--         title = "sharpe by loss-trigger: weekly naked" -->
+<!--     ) -->
+
+<!-- ``` -->
+
+
+<!-- ```{r, cache=TRUE, echo=FALSE, fig.height=20} -->
+<!-- df_sharpe_underlying_monthly %>%  -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     filter(loss_trigger != 1000) %>%  -->
+<!--     ggplot(aes(x = loss_trigger, y = avg_pnl)) + -->
+<!--         geom_point() +  -->
+<!--         facet_wrap(~underlying, nrow = 6, ncol = 2) + -->
+<!--     labs( -->
+<!--         title = "sharpe by loss-trigger: monthly naked" -->
+<!--     ) -->
+
+<!-- ``` -->
+
+
+<!-- #### Weekly Naked: Top Half vs Bottom Half -->
+
+<!-- In this section we focus on the weekly naked strategy - the only one that shows significant positive impact from a loss-trigger unwind. I hypothesized that the optimal loss trigger would be different for top-performers vs bottom performer. And this does not seem to be the case.  Both have an optimal unwind areound the 2.5x level. -->
+
+<!-- ```{r, top_half, echo=FALSE, cache=TRUE} -->
+<!-- chr_top_half_und <-  -->
+<!--     df_sharpe_underlying_weekly %>%  -->
+<!--         filter(loss_trigger == 1000) %>%  -->
+<!--         filter(dh_threshold == 1) %>%  -->
+<!--         top_n(6, sharpe) %>%  -->
+<!--         .$underlying -->
+
+
+
+<!-- # weekly -->
+<!-- df_top_weekly <- -->
+<!--     df_pnl_weekly %>% -->
+<!--         filter(underlying %in% chr_top_half_und) %>%  -->
+<!--         group_by( -->
+<!--             strategy -->
+<!--             , variation -->
+<!--             , loss_trigger -->
+<!--             , dh_threshold -->
+<!--             , data_date -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             dh_pnl = sum(scaled_managed_pnl) -->
+<!--         ) %>%  -->
+<!--         group_by( -->
+<!--             strategy -->
+<!--             , variation -->
+<!--             , dh_threshold -->
+<!--             , loss_trigger -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             avg_pnl = mean(dh_pnl) -->
+<!--             , sd_pnl = sd(dh_pnl) -->
+<!--             , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--         ) -->
+
+<!-- df_top_weekly <- -->
+<!--     df_top_weekly %>% ungroup() -->
+
+
+<!-- # weekly naked - average of top 5 loss-trigger levels. -->
+<!-- print( -->
+<!--     paste0( -->
+<!--         "TOP HALF - optimal loss trigger: " -->
+<!--         ,   df_top_weekly %>%  -->
+<!--                 filter(dh_threshold == 1) %>%  -->
+<!--                 filter(loss_trigger <= 10) %>%  -->
+<!--                 top_n(5, sharpe) %>%  -->
+<!--                 .$loss_trigger %>%  -->
+<!--                 mean() -->
+<!--     ) -->
+<!-- ) -->
+
+
+<!-- df_top_weekly %>%  -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     filter(loss_trigger <=10) %>%  -->
+<!--     ggplot() +  -->
+<!--         geom_point(aes(x=loss_trigger, y=sharpe)) + -->
+<!--         labs( -->
+<!--             title = "top half" -->
+<!--         ) -->
+<!-- ``` -->
+
+
+
+
+
+
+<!-- ```{r, bottom_half, echo=FALSE, cache=TRUE} -->
+<!-- chr_bottom_half_und <-  -->
+<!--     df_sharpe_underlying_weekly %>%  -->
+<!--         filter(loss_trigger == 1000) %>%  -->
+<!--         filter(dh_threshold == 1) %>%  -->
+<!--         top_n(-6, sharpe) %>%  -->
+<!--         .$underlying -->
+
+
+
+<!-- # weekly -->
+<!-- df_bottom_weekly <- -->
+<!--     df_pnl_weekly %>% -->
+<!--         filter(underlying %in% chr_bottom_half_und) %>%  -->
+<!--         group_by( -->
+<!--             strategy -->
+<!--             , variation -->
+<!--             , loss_trigger -->
+<!--             , dh_threshold -->
+<!--             , data_date -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             dh_pnl = sum(scaled_managed_pnl) -->
+<!--         ) %>%  -->
+<!--         group_by( -->
+<!--             strategy -->
+<!--             , variation -->
+<!--             , dh_threshold -->
+<!--             , loss_trigger -->
+<!--         ) %>%  -->
+<!--         summarize( -->
+<!--             avg_pnl = mean(dh_pnl) -->
+<!--             , sd_pnl = sd(dh_pnl) -->
+<!--             , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252) -->
+<!--         ) -->
+
+<!-- df_bottom_weekly <- -->
+<!--     df_bottom_weekly %>% ungroup() -->
+
+
+<!-- # weekly naked - average of top 5 loss-trigger levels. -->
+<!-- print( -->
+<!--     paste0( -->
+<!--         "BOTTOM HALF - optimal loss trigger: " -->
+<!--         ,   df_bottom_weekly %>%  -->
+<!--                 filter(dh_threshold == 1) %>%  -->
+<!--                 filter(loss_trigger <= 10) %>%  -->
+<!--                 top_n(5, sharpe) %>%  -->
+<!--                 .$loss_trigger %>%  -->
+<!--                 mean() -->
+<!--     ) -->
+<!-- ) -->
+
+
+
+<!-- df_bottom_weekly %>%  -->
+<!--     filter(dh_threshold == 1) %>%  -->
+<!--     filter(loss_trigger <=10) %>%  -->
+<!--     ggplot() +  -->
+<!--         geom_point(aes(x=loss_trigger, y=sharpe)) + -->
+<!--         labs( -->
+<!--             title = "bottom half" -->
+<!--         ) -->
+<!-- ``` -->
+
+
+<!-- ### Conclusions -->
+
+<!-- (Written on 3/14/2019)  I have to admit that I'm a bit discourage by these results.  When I did the SPY analysis for Leigh, it seemed like I could significantly improve naked option selling performance with a loss-trigger strategy, and that I could even rival the performance of delta-hedging.  However, with the large data set, even using an optimal unwind level, there is only a marginal improvement on performance relative to doing nothing (for all underlyings combined the sharpe goes from 0.55 to 0.65, not a massive jump).    -->
+
+<!-- One encouraging result is that optimal loss trigger for naked weekly option selling is 2.0-2.5, which is the same thing that I found in the SPY analysis, which feels good. -->
+
+<!-- It's also disappointing that there is no obvious optimal loss-trigger for naked monthly option selling.  So I don't have a good rule of thumb to apply to my current trading.  All fingers seems to point to moving to weekly options, but this will also quadruple what I pay on commissions.  It's hard to know if the performance is enough to compensate for this. -->
+
+<!-- However, the sitout strategy for weeklys is much more tractible, and makes strong intuitive sense, which I also like.   -->
+
+<!-- Based on the analysis so far, I leaning towards moving to a weekly strategy, with a 2.5x loss-trigger unwind.  I'll try running that for a while as I gather more information. -->
+
+
+<!-- ```{r} -->
+<!-- df_top_weekly %>%  -->
+<!--     filter(loss_trigger == 1000) -->
+
+<!-- df_bottom_weekly %>%  -->
+<!--     filter(loss_trigger == 1000) -->
+<!-- ``` -->
+
