@@ -1,0 +1,369 @@
+---
+title: "Closing Winners"
+subtitle: "Weekly ETF Options: 2014-2018"
+author: "Pritam Dalal"
+date: "3/29/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+<style>
+    body .main-container {
+        max-width: 700px;
+    }
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r, loading_packages, include=FALSE, cache=FALSE}
+library(tidyverse)
+```
+
+```{r, reading_data, include=FALSE, cache=TRUE}
+df_underlying <-
+    tibble(
+        symbol = c("DIA", "EEM", "EWZ", "FXI" ,"GDX", "GLD"
+                       , "IWM", "QQQ", "SLV", "SPY", "USO","XLE")
+    )
+
+#df_underlying <- tibble(symbol = c("SPY"))
+df_pnl_weekly <- tibble()
+df_pnl_daily <- tibble()
+df_total <- tibble()
+for (ix in 1:nrow(df_underlying)){
+
+    chr_underlying <- df_underlying$symbol[ix]
+    
+    # reading data  
+    chr_path <-
+        paste0(
+            "data_output/weekly/"
+            , str_to_lower(chr_underlying)
+            , "_weekly_2014_2018_managed_pnl_V2.csv"
+        )
+    df_pnl_weekly <- 
+        read_csv(chr_path, col_types = cols()) %>%
+            mutate(underlying = chr_underlying)
+    
+    # calculating daily PNL
+    df_daily_pnl <-
+        df_pnl_weekly %>% 
+            group_by(
+                strategy
+                , variation
+                , loss_trigger
+                , win_trigger
+                , dh_threshold
+                , data_date
+            ) %>% 
+            summarize(
+                dh_pnl = sum(scaled_managed_pnl)
+            )
+    
+    # amalgamating the total PNL
+    if (nrow(df_total) == 0){
+        df_total <- df_daily_pnl
+    } else {
+        df_total <-
+            df_total %>% 
+                left_join(
+                    df_daily_pnl
+                    , by = c("strategy", "variation", "loss_trigger"
+                             , "win_trigger", "dh_threshold", "data_date")
+                    , suffix = c("_total", "_current")
+                ) %>% 
+                mutate(
+                    dh_pnl = dh_pnl_total + dh_pnl_current
+                ) %>%
+                select(-c(dh_pnl_total, dh_pnl_current))
+    }
+    
+}
+```
+
+
+
+<br>
+The purpose of this analysis is to test a combined risk-management strategy of unwinding both winners and losers.  We focus on the weekly options.
+
+
+
+
+<br>
+
+### Data Integrity - comparing to loss-trigger analysis
+As an initial sanity check, let's make sure the sharpe ratios in this analysis match the ones calcuated in the previous loss-triggger analysis (03_optimal_unwind).  I saw a similar result when I did it for SPY.
+
+##### weekly delta-hedged (1.27)
+It is a match.
+
+```{r, data_integrity_unmanaged_weekly_dh, cache=TRUE, echo=FALSE}
+# calculating sharpe for "unmanaged" delta-hedged strategy
+# all underlyings combined
+df_total %>% 
+    filter(near(loss_trigger, 1000)) %>% 
+    filter(near(win_trigger, 1000)) %>% 
+    filter(strategy == "strangle") %>% 
+    filter(variation == 0.1) %>% 
+    filter(dh_threshold == 0) %>% 
+    group_by(loss_trigger, win_trigger, data_date) %>% 
+    summarize(
+        dh_pnl = sum(dh_pnl)
+    ) %>% 
+    group_by(loss_trigger, win_trigger) %>% 
+    summarize(
+        avg_pnl = mean(dh_pnl)
+        , sd_pnl = sd(dh_pnl)
+        , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
+    )
+```
+
+
+##### weekly naked (0.55)
+
+It is a match.
+```{r, data_integrity_unmanaged_weekly_naked, cache=TRUE, echo=FALSE}
+# calculating sharpe for "unmanaged" naked strategy
+# all underlyings combined
+df_total %>% 
+    filter(near(loss_trigger, 1000)) %>% 
+    filter(near(win_trigger, 1000)) %>% 
+    filter(strategy == "strangle") %>% 
+    filter(variation == 0.1) %>% 
+    filter(dh_threshold == 1) %>% 
+    group_by(loss_trigger, win_trigger, data_date) %>% 
+    summarize(
+        dh_pnl = sum(dh_pnl)
+    ) %>% 
+    group_by(loss_trigger, win_trigger) %>% 
+    summarize(
+        avg_pnl = mean(dh_pnl)
+        , sd_pnl = sd(dh_pnl)
+        , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
+    )
+```
+
+
+<br>
+
+### Data-Integrity: Breach Count by Loss-Trigger
+
+I completed this sanity check for XLE alone (because that's the last underlying that is loaded when reading in the data), and it looks right.  As the win-trigger threshold gets closer to 1, there are less and less breaches. (Loss trigger is set to 1000 for these resulst.)
+
+```{r, breach_count_weekly, cache=TRUE, include=FALSE}
+df_breach_count_weekly <-
+    df_pnl_weekly %>%
+        filter(near(loss_trigger, 1000)) %>%
+        group_by(underlying, dh_threshold, win_trigger, expiration) %>%
+        summarize(
+            breach_win = sum(any(breach_win))
+        ) %>%
+        group_by(dh_threshold, win_trigger) %>%
+        summarize(
+            breach_count = sum(breach_win)
+        )
+```
+
+
+
+```{r, graph_breach_count_weekly, cache=TRUE, echo=FALSE}
+df_breach_count_weekly %>%
+    filter(win_trigger != 1000) %>%
+    ggplot() +
+        geom_line(
+            aes(
+                x = win_trigger
+                , y = breach_count
+                , color = factor(dh_threshold))
+                , size = 0.75
+        ) +
+    labs(
+        title = "XLE: breaches by win trigger - weekly"
+        , subtitle = "loss-trigger set to 1000"
+        , x = "loss-trigger"
+        , y = "breach count"
+    )
+```
+
+
+Finally, lets make sure that the breach counts were zero for the loss-trigger=1000 and win-trigger=1000.
+
+```{r, unmanaged_loss_trigger_count, cache=TRUE}
+df_breach_count_weekly %>% filter(win_trigger == 1000) 
+```
+
+<br>
+
+### All Underlyings Combined
+
+We now combine the PNLs for all the underlyings and then check for optimal unwind levels.
+
+
+
+```{r, calc_sharpe, include=FALSE, cache=TRUE}
+# weekly
+df_sharpe_weekly <-
+    df_total %>%
+        group_by(
+            strategy
+            , variation
+            , loss_trigger
+            , win_trigger
+            , dh_threshold
+            , data_date
+        ) %>%
+        summarize(
+            dh_pnl = sum(dh_pnl)
+        ) %>%
+        group_by(
+            strategy
+            , variation
+            , dh_threshold
+            , loss_trigger
+            , win_trigger
+        ) %>%
+        summarize(
+            avg_pnl = mean(dh_pnl)
+            , sd_pnl = sd(dh_pnl)
+            , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
+        )
+
+df_sharpe_weekly <-
+    df_sharpe_weekly %>% ungroup()
+```
+
+
+
+#### weekly delta-hedged
+
+```{r, combined_weekly_delta_hedge, cache=TRUE}
+# weekly delta-hedged
+df_sharpe_weekly %>% 
+    filter(dh_threshold == 0) %>% 
+    filter(sharpe == max(sharpe)) %>% 
+    select(dh_threshold, loss_trigger, win_trigger, sharpe)
+```
+
+
+#### weekly naked
+
+```{r, combined_weekly_naked, cache=TRUE}
+# weekly naked
+df_sharpe_weekly %>% 
+    filter(dh_threshold == 1) %>% 
+    filter(sharpe == max(sharpe)) %>% 
+    select(dh_threshold, loss_trigger, win_trigger, sharpe)
+
+```
+
+<br>
+
+#### weekly naked (average of top-5)
+Instead of looking at just the single best win/loss trigger levels, it's more robust to take the average of the top 10 unwind levels.  
+
+
+**Observations:**
+
+1. It is clear that you should simply let your winners ride - there is no benefit to unwinding winners early.
+
+2. The average optimal loss-trigger level is 2.275.
+
+
+```{r, top_10, cache=TRUE}
+# weekly naked - average of top 5 loss-trigger levels.
+df_sharpe_weekly %>% 
+    filter(dh_threshold == 1) %>% 
+    top_n(10, sharpe) %>% 
+    select(dh_threshold, loss_trigger, win_trigger, avg_pnl, sharpe)
+```
+
+
+
+```{r, avg_top_10, echo=FALSE, cache=TRUE}
+print("Average optimal loss-trigger:")
+df_sharpe_weekly %>% 
+    #filter(win_trigger != 1000) %>% 
+    #filter(loss_trigger != 1000) %>% 
+    filter(dh_threshold == 1) %>% 
+    top_n(10, sharpe) %>% 
+    select(dh_threshold, loss_trigger, win_trigger, avg_pnl, sharpe) %>% 
+    .$loss_trigger %>% 
+    mean()
+```
+
+
+<br>
+
+#### visualization
+
+As we can see, given a loss-trigger level of 2.5, there is no benenfit to early unwinding due to a win-trigger.  The sharpe-ratio increases monotonically with a higher win-trigger.
+```{r, graph_all_combined_weekly_naked, cache=TRUE, echo=FALSE}
+df_total %>%
+    filter(loss_trigger != 1000) %>%
+    filter(win_trigger != 1000) %>% 
+    filter(near(loss_trigger, 2.5)) %>% 
+    filter(strategy == "strangle") %>%
+    filter(variation == 0.1) %>%
+    filter(dh_threshold == 1) %>%
+    group_by(loss_trigger, win_trigger, data_date) %>%
+    summarize(
+        dh_pnl = sum(dh_pnl)
+    ) %>%
+    group_by(loss_trigger, win_trigger) %>%
+    summarize(
+        avg_pnl = mean(dh_pnl)
+        , sd_pnl = sd(dh_pnl)
+        , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
+    ) %>%
+    ggplot() +
+        geom_point(aes(x=win_trigger, y=sharpe, color=factor(loss_trigger))) +
+        labs(
+            title = "weekly naked (loss-trigger = 2.5)"
+        )
+```
+
+
+
+The following heat map corroborates the fact that unwinding winners early seems to be of no benefit.
+
+```{r, heat_map_all_combined_weekly_naked, cache=TRUE, echo=FALSE}
+#df_pnl_weekly %>% 
+df_total %>% 
+    filter(loss_trigger != 1000) %>%
+    #filter(loss_trigger %in% seq(1, 10, 1)) %>% 
+    filter(win_trigger != 1000) %>% 
+    filter(strategy == "strangle") %>% 
+    filter(variation == 0.1) %>% 
+    filter(dh_threshold == 1) %>% 
+    group_by(loss_trigger, win_trigger, data_date) %>% 
+    summarize(
+        #dh_pnl = sum(scaled_managed_pnl)
+        dh_pnl = sum(dh_pnl)
+    ) %>% 
+    group_by(loss_trigger, win_trigger) %>% 
+    summarize(
+        avg_pnl = mean(dh_pnl)
+        , sd_pnl = sd(dh_pnl)
+        , sharpe = (mean(dh_pnl) / sd(dh_pnl)) * sqrt(252)
+    ) %>% 
+    ggplot(aes(loss_trigger, win_trigger, label = round(sharpe,2))) +
+        geom_raster(aes(fill = sharpe), interpolate = FALSE)  +
+        #geom_text(check_overlap = FALSE, size=2) + 
+        ggtitle("Sharpe-Ratio")
+
+```
+
+<br>
+
+### Conclusions
+
+There is no benefit to unwinding winners early, and there is a slight benefit to unwinding losses at 2.5x of initial premium.
+
+The true value of this conclusion is no I don't have to over manage my positions, which was taking a lot of time and energy, and was leading to poor investment outcomes.  For the past couple of months, I probably would have been better off doing nothing.
+
